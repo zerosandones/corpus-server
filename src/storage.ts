@@ -26,16 +26,52 @@ function docPath(id: string): string {
   return join(DOCS_DIR, `${id}.md`);
 }
 
-function metaPath(id: string): string {
-  return join(DOCS_DIR, `${id}.json`);
-}
-
 export function slugify(title: string): string {
   return title
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+/** Serialize a metadata object as a YAML front matter block. */
+function serializeFrontMatter(meta: DocumentMeta): string {
+  return [
+    "---",
+    `id: ${meta.id}`,
+    `title: ${meta.title}`,
+    `createdAt: ${meta.createdAt}`,
+    `updatedAt: ${meta.updatedAt}`,
+    "---",
+    "",
+  ].join("\n");
+}
+
+/** Parse a YAML front matter block from the start of a markdown string.
+ *  Returns the parsed fields and the body text that follows the block.
+ */
+function parseFrontMatter(raw: string): { meta: Partial<DocumentMeta>; body: string } {
+  const fmRegex = /^---\n([\s\S]*?)\n---\n?/;
+  const match = raw.match(fmRegex);
+  if (!match) {
+    return { meta: {}, body: raw };
+  }
+  const fmBlock = match[1] ?? "";
+  const body = raw.slice(match[0].length);
+  const meta: Partial<DocumentMeta> = {};
+  for (const line of fmBlock.split("\n")) {
+    const colon = line.indexOf(":");
+    if (colon === -1) continue;
+    const key = line.slice(0, colon).trim() as keyof DocumentMeta;
+    const value = line.slice(colon + 1).trim();
+    meta[key] = value;
+  }
+  return { meta, body };
+}
+
+/** Compose a full file string from metadata and body content. */
+function compose(meta: DocumentMeta, body: string): string {
+  return serializeFrontMatter(meta) + body;
 }
 
 export async function listDocuments(): Promise<DocumentMeta[]> {
@@ -48,12 +84,13 @@ export async function listDocuments(): Promise<DocumentMeta[]> {
   const docs: DocumentMeta[] = [];
   for (const id of ids) {
     try {
-      const meta = JSON.parse(
-        await readFile(metaPath(id), "utf-8")
-      ) as DocumentMeta;
-      docs.push(meta);
+      const raw = await readFile(docPath(id), "utf-8");
+      const { meta } = parseFrontMatter(raw);
+      if (meta.id && meta.title && meta.createdAt && meta.updatedAt) {
+        docs.push(meta as DocumentMeta);
+      }
     } catch {
-      // skip documents with missing metadata
+      // skip documents that cannot be read or parsed
     }
   }
   return docs;
@@ -62,12 +99,18 @@ export async function listDocuments(): Promise<DocumentMeta[]> {
 export async function getDocument(id: string): Promise<Document | null> {
   await ensureDocsDir();
   try {
-    const [content, meta] = await Promise.all([
-      readFile(docPath(id), "utf-8"),
-      readFile(metaPath(id), "utf-8"),
-    ]);
-    const { title, createdAt, updatedAt } = JSON.parse(meta) as DocumentMeta;
-    return { id, title, content, createdAt, updatedAt };
+    const raw = await readFile(docPath(id), "utf-8");
+    const { meta, body } = parseFrontMatter(raw);
+    if (!meta.id || !meta.title || !meta.createdAt || !meta.updatedAt) {
+      return null;
+    }
+    return {
+      id: meta.id,
+      title: meta.title,
+      content: body,
+      createdAt: meta.createdAt,
+      updatedAt: meta.updatedAt,
+    };
   } catch {
     return null;
   }
@@ -93,10 +136,7 @@ export async function createDocument(
   }
 
   const meta: DocumentMeta = { id: finalId, title, createdAt: now, updatedAt: now };
-  await Promise.all([
-    writeFile(docPath(finalId), content, "utf-8"),
-    writeFile(metaPath(finalId), JSON.stringify(meta, null, 2), "utf-8"),
-  ]);
+  await writeFile(docPath(finalId), compose(meta, content), "utf-8");
   return { ...meta, content };
 }
 
@@ -119,19 +159,17 @@ export async function updateDocument(
     updatedAt,
   };
 
-  await Promise.all([
-    writeFile(docPath(id), content, "utf-8"),
-    writeFile(metaPath(id), JSON.stringify(meta, null, 2), "utf-8"),
-  ]);
+  await writeFile(docPath(id), compose(meta, content), "utf-8");
   return { ...meta, content };
 }
 
 export async function deleteDocument(id: string): Promise<boolean> {
   await ensureDocsDir();
   try {
-    await Promise.all([unlink(docPath(id)), unlink(metaPath(id))]);
+    await unlink(docPath(id));
     return true;
   } catch {
     return false;
   }
 }
+
