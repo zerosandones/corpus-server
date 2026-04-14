@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { access } from "node:fs/promises";
+import { access, unlink } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
 import server from "./server";
@@ -24,6 +24,27 @@ describe("server basic functionality", () => {
 
   test("returns 404 for unknown routes", async () => {
     const response = await fetch(new URL("/does-not-exist", server.url));
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("Not found");
+  });
+});
+
+describe("document serving", () => {
+  const testSlug = "test-document";
+  const testFilePath = join(documentsDir, `${testSlug}.md`);
+  const testContent = "# Test Document\n\nThis is a test.";
+
+  test("returns a document with text/markdown content-type", async () => {
+    await Bun.write(testFilePath, testContent);
+    const response = await fetch(new URL(`/${testSlug}`, server.url));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("text/markdown");
+    expect(await response.text()).toBe(testContent);
+    await unlink(testFilePath);
+  });
+
+  test("returns 404 for a document that does not exist", async () => {
+    const response = await fetch(new URL("/no-such-document", server.url));
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("Not found");
   });
