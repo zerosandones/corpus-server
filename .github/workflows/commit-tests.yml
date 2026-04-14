@@ -19,4 +19,12 @@ jobs:
         run: bun install
 
       - name: Run tests
-        run: bun test
+        run: bun test --reporter=junit --reporter-outfile=results.xml
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Bun Tests
+          path: results.xml
+          reporter: jest-junit
