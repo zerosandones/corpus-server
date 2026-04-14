@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { access, writeFile, unlink } from "node:fs/promises";
+import { access, unlink } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
 import server from "./server";
@@ -35,7 +35,7 @@ describe("document serving", () => {
   const testContent = "# Test Document\n\nThis is a test.";
 
   test("returns a document with text/markdown content-type", async () => {
-    await writeFile(testFilePath, testContent, "utf-8");
+    await Bun.write(testFilePath, testContent);
     const response = await fetch(new URL(`/${testSlug}`, server.url));
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toContain("text/markdown");
