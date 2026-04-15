@@ -1,22 +1,13 @@
-FROM oven/bun:1 AS builder
+FROM docker.io/oven/bun:1 AS builder
 
 WORKDIR /app
+COPY . .
+RUN bun install --frozen-lockfile && bun build ./src/server.ts --target bun --outdir ./dist
 
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
 
-COPY tsconfig.json ./
-COPY src ./src
-
-FROM oven/bun:1-distroless
+FROM docker.io/oven/bun:1-distroless
 
 WORKDIR /app
-
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/tsconfig.json ./
-COPY package.json ./
-
+COPY --from=builder /app/dist ./bin
 EXPOSE 8080
-
-CMD ["bun", "run", "start"]
+CMD ["./bin/server.js"]

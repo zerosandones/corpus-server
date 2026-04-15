@@ -12,6 +12,7 @@ const server = Bun.serve({
   port: Number(process.env.PORT) || 8080,
 
   async fetch(req) {
+    console.log(`Received request: ${req.method} ${req.url}`);
     const url = new URL(req.url);
     const pathname = url.pathname;
 
@@ -21,6 +22,7 @@ const server = Bun.serve({
       const slug = match[1] as string;
       const content = await getDocument(slug);
       if (content !== null) {
+        console.log(`Serving document for slug: ${slug}`);
         return new Response(content, {
           status: 200,
           headers: {
@@ -31,6 +33,7 @@ const server = Bun.serve({
     }
 
     //default handler for all unmatched routes
+    console.log(`No matching route for: ${req.method} ${req.url}`);
     return new Response("Not found", { status: 404 });
   }
 
