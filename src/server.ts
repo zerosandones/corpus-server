@@ -1,5 +1,5 @@
 import type { BunRequest } from "bun";
-import { ensureDocsDir, getDocument } from "./storage";
+import { ensureDocsDir, getDocument, saveDocument } from "./storage";
 
 console.log("Starting server...");
 
@@ -15,6 +15,26 @@ const server = Bun.serve({
     console.log(`Received request: ${req.method} ${req.url}`);
     const url = new URL(req.url);
     const pathname = url.pathname;
+
+    // Match any non-root path for routing
+    const pathMatch = pathname.match(/^\/(.+)$/);
+
+    if (req.method === "POST" && pathMatch) {
+      const slug = pathMatch[1];
+      const content = await req.text();
+      const result = await saveDocument(slug, content);
+      if (result === "created") {
+        console.log(`Document saved for slug: ${slug}`);
+        return new Response("Created", { status: 200 });
+      }
+      if (result === "conflict") {
+        console.log(`Document conflict for slug: ${slug}`);
+        return new Response("Conflict", { status: 409 });
+      }
+      // invalid slug
+      console.log(`Invalid slug for POST: ${slug}`);
+      return new Response("Bad Request", { status: 400 });
+    }
 
     // Match /:slug — single path segment, no extension
     const match = pathname.match(/^\/([^/]+)$/);

@@ -43,3 +43,43 @@ export async function getDocument(slug: string, folderName: string = "documents"
   }
   return file.text();
 }
+
+/** Saves a document to the specified path, creating directories as needed.
+ * The slug may include forward-slash-separated path segments (e.g., "category/my-doc").
+ * Each path segment must be in kebab-case format (lowercase letters, numbers, and hyphens).
+ * Returns "created" when the document is written successfully,
+ * "conflict" when a document already exists at that path,
+ * and "invalid" when any path segment fails validation.
+ *
+ * @param slug The document slug, optionally including subdirectory segments (e.g., "category/my-doc").
+ * @param content The Markdown content to save.
+ * @param folderName The root folder to save into (default: "documents").
+ * @returns A promise that resolves to "created", "conflict", or "invalid".
+ * @example
+ * await saveDocument("my-doc", "# Hello"); // saves to documents/my-doc.md
+ * await saveDocument("category/my-doc", "# Hello"); // saves to documents/category/my-doc.md
+ */
+export async function saveDocument(
+  slug: string,
+  content: string,
+  folderName: string = "documents"
+): Promise<"created" | "conflict" | "invalid"> {
+  const segments = slug.split("/");
+  if (segments.length === 0 || segments.some((s) => !SAFE_SLUG.test(s))) {
+    return "invalid";
+  }
+
+  const filePath = join(import.meta.dir, "..", folderName, `${slug}.md`);
+  const file = Bun.file(filePath);
+
+  if (await file.exists()) {
+    return "conflict";
+  }
+
+  const fileDir = join(import.meta.dir, "..", folderName, ...segments.slice(0, -1));
+  if (segments.length > 1) {
+    await mkdir(fileDir, { recursive: true });
+  }
+  await Bun.write(filePath, content);
+  return "created";
+}

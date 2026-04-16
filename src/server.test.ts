@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { access, unlink } from "node:fs/promises";
+import { access, rm, unlink } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
 import server from "./server";
@@ -47,6 +47,51 @@ describe("document serving", () => {
     const response = await fetch(new URL("/no-such-document", server.url));
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("Not found");
+  });
+});
+
+describe("document uploading", () => {
+  const uploadSlug = "upload-test-doc";
+  const uploadFilePath = join(documentsDir, `${uploadSlug}.md`);
+  const uploadContent = "# Upload Test\n\nUploaded via POST.";
+
+  test("returns 200 when a new document is saved via POST", async () => {
+    const response = await fetch(new URL(`/${uploadSlug}`, server.url), {
+      method: "POST",
+      body: uploadContent,
+    });
+    expect(response.status).toBe(200);
+    await unlink(uploadFilePath);
+  });
+
+  test("returns 409 when document already exists", async () => {
+    await Bun.write(uploadFilePath, uploadContent);
+    const response = await fetch(new URL(`/${uploadSlug}`, server.url), {
+      method: "POST",
+      body: "# Different Content",
+    });
+    expect(response.status).toBe(409);
+    await unlink(uploadFilePath);
+  });
+
+  test("creates nested directories and saves document via POST", async () => {
+    const nestedSlug = "category/nested-upload";
+    const nestedFilePath = join(documentsDir, "category", "nested-upload.md");
+    const response = await fetch(new URL(`/${nestedSlug}`, server.url), {
+      method: "POST",
+      body: "# Nested Upload",
+    });
+    expect(response.status).toBe(200);
+    await unlink(nestedFilePath);
+    await rm(join(documentsDir, "category"), { recursive: true, force: true });
+  });
+
+  test("returns 400 when POST slug is invalid", async () => {
+    const response = await fetch(new URL("/Invalid-Slug", server.url), {
+      method: "POST",
+      body: "# Content",
+    });
+    expect(response.status).toBe(400);
   });
 });
 
