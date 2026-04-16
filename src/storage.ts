@@ -3,6 +3,9 @@ import { join } from "path";
 
 const SAFE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/; //validates URL-safe document slugs in kebab-case format
 
+/** Represents the outcome of a save-document operation. */
+export type SaveDocumentResult = "created" | "conflict" | "invalid";
+
 /** Ensures the specified documents directory exists.
  * By default, it creates a "documents" directory in the parent directory of this module.
  * You can specify a different folder name if needed (e.g., for testing).
@@ -63,7 +66,7 @@ export async function saveDocument(
   slug: string,
   content: string,
   folderName: string = "documents"
-): Promise<"created" | "conflict" | "invalid"> {
+): Promise<SaveDocumentResult> {
   const segments = slug.split("/");
   if (segments.length === 0 || segments.some((s) => !SAFE_SLUG.test(s))) {
     return "invalid";
