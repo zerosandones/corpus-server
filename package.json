@@ -6,7 +6,8 @@
   "private": true,
   "scripts": {
     "start": "bun run src/server.ts",
-    "test": "bun test"
+    "test": "bun test src",
+    "test:e2e": "bun test e2e"
   },
   "devDependencies": {
     "@types/bun": "latest"
