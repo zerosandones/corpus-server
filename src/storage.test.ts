@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach, afterAll } from "bun:test";
 import { rm, stat, writeFile } from "fs/promises";
 import { join } from "path";
-import { ensureDocsDir, getDocument } from "./storage";
+import { ensureDocsDir, getDocument, saveDocument } from "./storage";
 
 const testDocsDir = join(import.meta.dir, "..", "temp");
 
@@ -97,6 +97,71 @@ describe("storage", () => {
     test("rejects slug with spaces", async () => {
       const result = await getDocument("invalid doc");
       expect(result).toBeNull();
+    });
+  });
+
+  describe("saveDocument", () => {
+    beforeEach(async () => {
+      await ensureDocsDir("temp");
+    });
+
+    test("saves a new document and returns 'created'", async () => {
+      const testSlug = "new-doc";
+      const testContent = "# New Document";
+      const result = await saveDocument(testSlug, testContent, "temp");
+      expect(result).toBe("created");
+      const filePath = join(testDocsDir, `${testSlug}.md`);
+      expect(await Bun.file(filePath).text()).toBe(testContent);
+    });
+
+    test("returns 'conflict' when document already exists", async () => {
+      const testSlug = "existing-doc";
+      const filePath = join(testDocsDir, `${testSlug}.md`);
+      await writeFile(filePath, "# Existing");
+      const result = await saveDocument(testSlug, "# New Content", "temp");
+      expect(result).toBe("conflict");
+    });
+
+    test("creates subdirectories that do not exist", async () => {
+      const testSlug = "category/sub-doc";
+      const testContent = "# Sub Document";
+      const result = await saveDocument(testSlug, testContent, "temp");
+      expect(result).toBe("created");
+      const filePath = join(testDocsDir, "category", "sub-doc.md");
+      expect(await Bun.file(filePath).text()).toBe(testContent);
+    });
+
+    test("returns 'created' for deeply nested path", async () => {
+      const testSlug = "a/b/c/deep-doc";
+      const result = await saveDocument(testSlug, "# Deep", "temp");
+      expect(result).toBe("created");
+    });
+
+    test("returns 'conflict' for nested doc that already exists", async () => {
+      const testSlug = "nested/conflict-doc";
+      await saveDocument(testSlug, "# First", "temp");
+      const result = await saveDocument(testSlug, "# Second", "temp");
+      expect(result).toBe("conflict");
+    });
+
+    test("returns 'invalid' for slug with uppercase letters", async () => {
+      const result = await saveDocument("Invalid-Doc", "content", "temp");
+      expect(result).toBe("invalid");
+    });
+
+    test("returns 'invalid' for slug with invalid segment", async () => {
+      const result = await saveDocument("valid/Invalid-Seg", "content", "temp");
+      expect(result).toBe("invalid");
+    });
+
+    test("returns 'invalid' for empty slug", async () => {
+      const result = await saveDocument("", "content", "temp");
+      expect(result).toBe("invalid");
+    });
+
+    test("returns 'invalid' for slug with consecutive hyphens", async () => {
+      const result = await saveDocument("invalid--slug", "content", "temp");
+      expect(result).toBe("invalid");
     });
   });
 });
