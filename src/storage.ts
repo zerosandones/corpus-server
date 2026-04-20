@@ -100,7 +100,7 @@ export type FolderEntry = {
  * or null when the folder does not exist.
  *
  * @param folderPath Path relative to the documents root (default: "" for the root).
- * @param folderName The root folder name (default: "documents").
+ * @param folderName The name of the base directory (relative to the project root) that contains all documents (default: "documents").
  * @returns A promise resolving to an array of FolderEntry objects, or null if the folder does not exist.
  * @example
  * const entries = await listFolder(); // lists documents in "documents/"

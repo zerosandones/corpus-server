@@ -129,7 +129,7 @@ describe("folder index", () => {
     await rm(indexDir, { recursive: true, force: true });
   });
 
-  test("falls back to slug title when document has no H1 heading", async () => {
+  test("falls back to slug base name when document has no H1 heading", async () => {
     const filePath = join(documentsDir, "no-heading-doc.md");
     await Bun.write(filePath, "Just some content without a heading.");
     const response = await fetch(new URL("/", server.url));

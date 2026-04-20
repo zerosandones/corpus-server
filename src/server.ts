@@ -5,7 +5,8 @@ import type { FolderEntry } from "./storage";
 function buildFolderIndex(heading: string, entries: FolderEntry[]): string {
   const lines = [`# ${heading}`, ""];
   for (const entry of entries) {
-    const label = entry.title ?? entry.slug;
+    const baseName = entry.slug.split("/").pop() ?? entry.slug;
+    const label = entry.title ?? baseName;
     lines.push(`- [${label}](/${entry.slug})`);
   }
   return lines.join("\n");
