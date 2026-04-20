@@ -1,5 +1,5 @@
 import type { BunRequest } from "bun";
-import { ensureDocsDir, getDocument, saveDocument } from "./storage";
+import { ensureDocsDir, getDocument, saveDocument, updateDocument } from "./storage";
 
 console.log("Starting server...");
 
@@ -18,6 +18,23 @@ const server = Bun.serve({
 
     // Match any non-root path for routing
     const pathMatch = pathname.match(/^\/(.+)$/);
+
+    if (req.method === "PUT" && pathMatch) {
+      const slug = pathMatch[1];
+      const content = await req.text();
+      const result = await updateDocument(slug, content);
+      if (result === "updated") {
+        console.log(`Document updated for slug: ${slug}`);
+        return new Response("OK", { status: 200 });
+      }
+      if (result === "not_found") {
+        console.log(`Document not found for PUT: ${slug}`);
+        return new Response("Not found", { status: 404 });
+      }
+      // invalid slug
+      console.log(`Invalid slug for PUT: ${slug}`);
+      return new Response("Bad Request", { status: 400 });
+    }
 
     if (req.method === "POST" && pathMatch) {
       const slug = pathMatch[1];
