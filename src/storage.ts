@@ -6,6 +6,9 @@ const SAFE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/; //validates URL-safe document sl
 /** Represents the outcome of a save-document operation. */
 export type SaveDocumentResult = "created" | "conflict" | "invalid";
 
+/** Represents the outcome of an update-document operation. */
+export type UpdateDocumentResult = "updated" | "not_found" | "invalid";
+
 /** Ensures the specified documents directory exists.
  * By default, it creates a "documents" directory in the parent directory of this module.
  * You can specify a different folder name if needed (e.g., for testing).
@@ -85,4 +88,40 @@ export async function saveDocument(
   }
   await Bun.write(filePath, content);
   return "created";
+}
+
+/** Updates an existing document at the specified slug path.
+ * The slug may include forward-slash-separated path segments (e.g., "category/my-doc").
+ * Each path segment must be in kebab-case format (lowercase letters, numbers, and hyphens).
+ * Returns "updated" when the document is overwritten successfully,
+ * "not_found" when no document exists at that path,
+ * and "invalid" when any path segment fails validation.
+ *
+ * @param slug The document slug, optionally including subdirectory segments (e.g., "category/my-doc").
+ * @param content The new Markdown content to write.
+ * @param folderName The root folder to update into (default: "documents").
+ * @returns A promise that resolves to "updated", "not_found", or "invalid".
+ * @example
+ * await updateDocument("my-doc", "# Updated"); // updates documents/my-doc.md
+ * await updateDocument("category/my-doc", "# Updated"); // updates documents/category/my-doc.md
+ */
+export async function updateDocument(
+  slug: string,
+  content: string,
+  folderName: string = "documents"
+): Promise<UpdateDocumentResult> {
+  const segments = slug.split("/");
+  if (segments.length === 0 || segments.some((s) => !SAFE_SLUG.test(s))) {
+    return "invalid";
+  }
+
+  const filePath = join(import.meta.dir, "..", folderName, `${slug}.md`);
+  const file = Bun.file(filePath);
+
+  if (!(await file.exists())) {
+    return "not_found";
+  }
+
+  await Bun.write(filePath, content);
+  return "updated";
 }
