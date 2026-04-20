@@ -10,10 +10,13 @@ export type DeleteDocumentResult = "deleted" | "not_found" | "invalid";
 /** Represents the outcome of an update-document operation. */
 export type UpdateDocumentResult = "updated" | "not_found" | "invalid";
 
+/** Represents the outcome of a delete-document operation. */
+export type DeleteDocumentResult = "deleted" | "not-found" | "invalid";
+
 /** Ensures the specified documents directory exists.
  * By default, it creates a "documents" directory in the parent directory of this module.
  * You can specify a different folder name if needed (e.g., for testing).
- * 
+ *
  * @param folderName The name of the folder to create (default: "documents").
  * @returns A promise that resolves when the directory is ensured.
  * @throws If there is an error creating the directory (other than it already existing).
@@ -21,7 +24,9 @@ export type UpdateDocumentResult = "updated" | "not_found" | "invalid";
  * await ensureDocsDir(); // Ensures "documents" directory exists
  * await ensureDocsDir("temp"); // Ensures "temp" directory exists (useful for tests)
  */
-export async function ensureDocsDir(folderName: string = "documents"): Promise<void> {
+export async function ensureDocsDir(
+  folderName: string = "documents",
+): Promise<void> {
   const dir = join(import.meta.dir, "..", folderName);
   await mkdir(dir, { recursive: true });
 }
@@ -31,7 +36,7 @@ export async function ensureDocsDir(folderName: string = "documents"): Promise<v
  * The function looks for a Markdown file with the name `${slug}.md` in the specified folder.
  * If the file exists and the slug is valid, it returns the content as a string.
  * If the file does not exist or the slug is invalid, it returns null.
- * 
+ *
  * @param slug The document slug (e.g., "my-document").
  * @param folderName The name of the folder where documents are stored (default: "documents").
  * @returns A promise that resolves to the document content as a string, or null if not found/invalid.
@@ -39,7 +44,10 @@ export async function ensureDocsDir(folderName: string = "documents"): Promise<v
  * const content = await getDocument("my-document"); // Retrieves content of "documents/my-document.md"
  * const content = await getDocument("test-doc", "temp"); // Retrieves content of "temp/test-doc.md"
  */
-export async function getDocument(slug: string, folderName: string = "documents"): Promise<string | null> {
+export async function getDocument(
+  slug: string,
+  folderName: string = "documents",
+): Promise<string | null> {
   if (!SAFE_SLUG.test(slug)) {
     return null;
   }
@@ -69,7 +77,7 @@ export async function getDocument(slug: string, folderName: string = "documents"
 export async function saveDocument(
   slug: string,
   content: string,
-  folderName: string = "documents"
+  folderName: string = "documents",
 ): Promise<SaveDocumentResult> {
   const segments = slug.split("/");
   if (segments.length === 0 || segments.some((s) => !SAFE_SLUG.test(s))) {
@@ -83,7 +91,12 @@ export async function saveDocument(
     return "conflict";
   }
 
-  const fileDir = join(import.meta.dir, "..", folderName, ...segments.slice(0, -1));
+  const fileDir = join(
+    import.meta.dir,
+    "..",
+    folderName,
+    ...segments.slice(0, -1),
+  );
   if (segments.length > 1) {
     await mkdir(fileDir, { recursive: true });
   }
@@ -154,7 +167,7 @@ export async function deleteDocument(
 export async function updateDocument(
   slug: string,
   content: string,
-  folderName: string = "documents"
+  folderName: string = "documents",
 ): Promise<UpdateDocumentResult> {
   const segments = slug.split("/");
   if (segments.length === 0 || segments.some((s) => !SAFE_SLUG.test(s))) {
@@ -170,4 +183,38 @@ export async function updateDocument(
 
   await Bun.write(filePath, content);
   return "updated";
+}
+
+/** Deletes a document at the specified slug path.
+ * The slug may include forward-slash-separated path segments (e.g., "category/my-doc").
+ * Each path segment must be in kebab-case format (lowercase letters, numbers, and hyphens).
+ * Returns "deleted" when the document is removed successfully,
+ * "not-found" when no document exists at that path,
+ * and "invalid" when any path segment fails validation.
+ *
+ * @param slug The document slug, optionally including subdirectory segments (e.g., "category/my-doc").
+ * @param folderName The root folder to delete from (default: "documents").
+ * @returns A promise that resolves to "deleted", "not-found", or "invalid".
+ * @example
+ * await deleteDocument("my-doc"); // deletes documents/my-doc.md
+ * await deleteDocument("category/my-doc"); // deletes documents/category/my-doc.md
+ */
+export async function deleteDocument(
+  slug: string,
+  folderName: string = "documents",
+): Promise<DeleteDocumentResult> {
+  const segments = slug.split("/");
+  if (segments.length === 0 || segments.some((s) => !SAFE_SLUG.test(s))) {
+    return "invalid";
+  }
+
+  const filePath = join(import.meta.dir, "..", folderName, `${slug}.md`);
+  const file = Bun.file(filePath);
+
+  if (!(await file.exists())) {
+    return "not-found";
+  }
+
+  await unlink(filePath);
+  return "deleted";
 }

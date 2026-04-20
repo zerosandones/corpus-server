@@ -1,13 +1,18 @@
-import { ensureDocsDir, getDocument, saveDocument, updateDocument, deleteDocument } from "./storage";
+import {
+  ensureDocsDir,
+  getDocument,
+  saveDocument,
+  updateDocument,
+  deleteDocument,
+} from "./storage";
 
 console.log("Starting server...");
 
-console.log("Checking data directory...")
+console.log("Checking data directory...");
 await ensureDocsDir();
 console.log("Data directory is ready.");
 
 const server = Bun.serve({
-
   port: Number(process.env.PORT) || 8080,
 
   async fetch(req) {
@@ -96,9 +101,8 @@ const server = Bun.serve({
     //default handler for all unmatched routes
     console.log(`No matching route for: ${req.method} ${req.url}`);
     return new Response("Not found", { status: 404 });
-  }
-
-})
+  },
+});
 console.log(`corpus-server listening on port ${server.port}`);
 
 export default server;
