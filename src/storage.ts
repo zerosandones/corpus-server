@@ -1,10 +1,13 @@
-import { mkdir } from "fs/promises";
+import { mkdir, unlink } from "fs/promises";
 import { join } from "path";
 
 const SAFE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/; //validates URL-safe document slugs in kebab-case format
 
 /** Represents the outcome of a save-document operation. */
 export type SaveDocumentResult = "created" | "conflict" | "invalid";
+
+/** Represents the outcome of a delete-document operation. */
+export type DeleteDocumentResult = "deleted" | "not-found" | "invalid";
 
 /** Ensures the specified documents directory exists.
  * By default, it creates a "documents" directory in the parent directory of this module.
@@ -85,4 +88,38 @@ export async function saveDocument(
   }
   await Bun.write(filePath, content);
   return "created";
+}
+
+/** Deletes a document at the specified slug path.
+ * The slug may include forward-slash-separated path segments (e.g., "category/my-doc").
+ * Each path segment must be in kebab-case format (lowercase letters, numbers, and hyphens).
+ * Returns "deleted" when the document is removed successfully,
+ * "not-found" when no document exists at that path,
+ * and "invalid" when any path segment fails validation.
+ *
+ * @param slug The document slug, optionally including subdirectory segments (e.g., "category/my-doc").
+ * @param folderName The root folder to delete from (default: "documents").
+ * @returns A promise that resolves to "deleted", "not-found", or "invalid".
+ * @example
+ * await deleteDocument("my-doc"); // deletes documents/my-doc.md
+ * await deleteDocument("category/my-doc"); // deletes documents/category/my-doc.md
+ */
+export async function deleteDocument(
+  slug: string,
+  folderName: string = "documents"
+): Promise<DeleteDocumentResult> {
+  const segments = slug.split("/");
+  if (segments.length === 0 || segments.some((s) => !SAFE_SLUG.test(s))) {
+    return "invalid";
+  }
+
+  const filePath = join(import.meta.dir, "..", folderName, `${slug}.md`);
+  const file = Bun.file(filePath);
+
+  if (!(await file.exists())) {
+    return "not-found";
+  }
+
+  await unlink(filePath);
+  return "deleted";
 }

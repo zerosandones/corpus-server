@@ -1,5 +1,5 @@
 import type { BunRequest } from "bun";
-import { ensureDocsDir, getDocument, saveDocument } from "./storage";
+import { deleteDocument, ensureDocsDir, getDocument, saveDocument } from "./storage";
 
 console.log("Starting server...");
 
@@ -34,6 +34,28 @@ const server = Bun.serve({
       // invalid slug
       console.log(`Invalid slug for POST: ${slug}`);
       return new Response("Bad Request", { status: 400 });
+    }
+
+    if (req.method === "DELETE" && pathMatch) {
+      const slug = pathMatch[1];
+      try {
+        const result = await deleteDocument(slug);
+        if (result === "deleted") {
+          console.log(`Document deleted for slug: ${slug}`);
+          return new Response("OK", { status: 200 });
+        }
+        if (result === "not-found") {
+          console.log(`Document not found for DELETE: ${slug}`);
+          return new Response("Not found", { status: 404 });
+        }
+        if (result === "invalid") {
+          console.log(`Invalid slug for DELETE: ${slug}`);
+          return new Response("Not found", { status: 404 });
+        }
+      } catch (err) {
+        console.error(`Error deleting document for slug: ${slug}`, err);
+        return new Response("Internal Server Error", { status: 500 });
+      }
     }
 
     // Match /:slug — single path segment, no extension
