@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach, afterAll } from "bun:test";
-import { rm, stat, writeFile } from "fs/promises";
+import { mkdir, rm, stat, writeFile } from "fs/promises";
 import { join } from "path";
-import { ensureDocsDir, getDocument, saveDocument } from "./storage";
+import { ensureDocsDir, getDocument, listFolder, saveDocument } from "./storage";
 
 const testDocsDir = join(import.meta.dir, "..", "temp");
 
@@ -162,6 +162,66 @@ describe("storage", () => {
     test("returns 'invalid' for slug with consecutive hyphens", async () => {
       const result = await saveDocument("invalid--slug", "content", "temp");
       expect(result).toBe("invalid");
+    });
+  });
+
+  describe("listFolder", () => {
+    beforeEach(async () => {
+      await ensureDocsDir("temp");
+    });
+
+    test("returns empty array for an empty folder", async () => {
+      const emptyDir = join(testDocsDir, "empty-subfolder");
+      await mkdir(emptyDir, { recursive: true });
+      const result = await listFolder("empty-subfolder", "temp");
+      expect(result).toEqual([]);
+      await rm(emptyDir, { recursive: true, force: true });
+    });
+
+    test("returns null for a non-existent folder", async () => {
+      const result = await listFolder("no-such-folder", "temp");
+      expect(result).toBeNull();
+    });
+
+    test("returns entries with slug and title for markdown files", async () => {
+      const filePath = join(testDocsDir, "list-doc.md");
+      await writeFile(filePath, "# Listed Doc\n\nContent.");
+      const result = await listFolder("", "temp");
+      expect(result).not.toBeNull();
+      const entry = result!.find((e) => e.slug === "list-doc");
+      expect(entry).toBeDefined();
+      expect(entry!.title).toBe("Listed Doc");
+    });
+
+    test("returns null title when document has no H1 heading", async () => {
+      const filePath = join(testDocsDir, "no-heading.md");
+      await writeFile(filePath, "No heading here.");
+      const result = await listFolder("", "temp");
+      expect(result).not.toBeNull();
+      const entry = result!.find((e) => e.slug === "no-heading");
+      expect(entry).toBeDefined();
+      expect(entry!.title).toBeNull();
+    });
+
+    test("returns entries with correct slug for a subfolder", async () => {
+      const subDir = join(testDocsDir, "sub");
+      await mkdir(subDir, { recursive: true });
+      const filePath = join(subDir, "sub-doc.md");
+      await writeFile(filePath, "# Sub Doc");
+      const result = await listFolder("sub", "temp");
+      expect(result).not.toBeNull();
+      expect(result!.length).toBe(1);
+      expect(result![0].slug).toBe("sub/sub-doc");
+      expect(result![0].title).toBe("Sub Doc");
+    });
+
+    test("does not include non-markdown files", async () => {
+      const filePath = join(testDocsDir, "not-markdown.txt");
+      await writeFile(filePath, "text file");
+      const result = await listFolder("", "temp");
+      expect(result).not.toBeNull();
+      const entry = result!.find((e) => e.slug === "not-markdown");
+      expect(entry).toBeUndefined();
     });
   });
 });

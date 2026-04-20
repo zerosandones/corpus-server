@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { access, rm, unlink } from "node:fs/promises";
+import { access, mkdir, rm, unlink } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
 import server from "./server";
@@ -16,10 +16,9 @@ describe("server basic functionality", () => {
     await access(documentsDir, constants.F_OK);
   });
 
-  test("returns 404 for root route", async () => {
+  test("returns 204 for root route when no documents exist", async () => {
     const response = await fetch(new URL("/", server.url));
-    expect(response.status).toBe(404);
-    expect(await response.text()).toBe("Not found");
+    expect(response.status).toBe(204);
   });
 
   test("returns 404 for unknown routes", async () => {
@@ -92,6 +91,52 @@ describe("document uploading", () => {
       body: "# Content",
     });
     expect(response.status).toBe(400);
+  });
+});
+
+describe("folder index", () => {
+  const indexDir = join(documentsDir, "index-test");
+
+  test("returns 200 with markdown index for root when documents exist", async () => {
+    const filePath = join(documentsDir, "index-root-doc.md");
+    await Bun.write(filePath, "# Root Doc\n\nSome content.");
+    const response = await fetch(new URL("/", server.url));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("text/markdown");
+    const body = await response.text();
+    expect(body).toContain("# Index");
+    expect(body).toContain("[Root Doc](/index-root-doc)");
+    await unlink(filePath);
+  });
+
+  test("returns 200 with markdown index for a folder with documents", async () => {
+    await mkdir(indexDir, { recursive: true });
+    const filePath = join(indexDir, "child-doc.md");
+    await Bun.write(filePath, "# Child Doc\n\nContent.");
+    const response = await fetch(new URL("/index-test", server.url));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("text/markdown");
+    const body = await response.text();
+    expect(body).toContain("# index-test");
+    expect(body).toContain("[Child Doc](/index-test/child-doc)");
+    await rm(indexDir, { recursive: true, force: true });
+  });
+
+  test("returns 204 for an empty folder", async () => {
+    await mkdir(indexDir, { recursive: true });
+    const response = await fetch(new URL("/index-test", server.url));
+    expect(response.status).toBe(204);
+    await rm(indexDir, { recursive: true, force: true });
+  });
+
+  test("falls back to slug title when document has no H1 heading", async () => {
+    const filePath = join(documentsDir, "no-heading-doc.md");
+    await Bun.write(filePath, "Just some content without a heading.");
+    const response = await fetch(new URL("/", server.url));
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toContain("[no-heading-doc](/no-heading-doc)");
+    await unlink(filePath);
   });
 });
 

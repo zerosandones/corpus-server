@@ -1,5 +1,15 @@
 import type { BunRequest } from "bun";
-import { ensureDocsDir, getDocument, saveDocument } from "./storage";
+import { ensureDocsDir, getDocument, listFolder, saveDocument } from "./storage";
+import type { FolderEntry } from "./storage";
+
+function buildFolderIndex(heading: string, entries: FolderEntry[]): string {
+  const lines = [`# ${heading}`, ""];
+  for (const entry of entries) {
+    const label = entry.title ?? entry.slug;
+    lines.push(`- [${label}](/${entry.slug})`);
+  }
+  return lines.join("\n");
+}
 
 console.log("Starting server...");
 
@@ -36,6 +46,18 @@ const server = Bun.serve({
       return new Response("Bad Request", { status: 400 });
     }
 
+    if (req.method === "GET" && pathname === "/") {
+      console.log("Listing root folder index");
+      const entries = await listFolder();
+      if (entries === null || entries.length === 0) {
+        return new Response(null, { status: 204 });
+      }
+      return new Response(buildFolderIndex("Index", entries), {
+        status: 200,
+        headers: { "Content-Type": "text/markdown; charset=utf-8" },
+      });
+    }
+
     // Match /:slug — single path segment, no extension
     const match = pathname.match(/^\/([^/]+)$/);
     if (match) {
@@ -48,6 +70,19 @@ const server = Bun.serve({
           headers: {
             "Content-Type": "text/markdown; charset=utf-8",
           },
+        });
+      }
+
+      const folderEntries = await listFolder(slug);
+      if (folderEntries !== null) {
+        if (folderEntries.length === 0) {
+          console.log(`Empty folder for slug: ${slug}`);
+          return new Response(null, { status: 204 });
+        }
+        console.log(`Serving folder index for slug: ${slug}`);
+        return new Response(buildFolderIndex(slug, folderEntries), {
+          status: 200,
+          headers: { "Content-Type": "text/markdown; charset=utf-8" },
         });
       }
     }

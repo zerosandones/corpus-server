@@ -1,4 +1,4 @@
-import { mkdir } from "fs/promises";
+import { mkdir, readdir } from "fs/promises";
 import { join } from "path";
 
 const SAFE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/; //validates URL-safe document slugs in kebab-case format
@@ -85,4 +85,54 @@ export async function saveDocument(
   }
   await Bun.write(filePath, content);
   return "created";
+}
+
+/** Represents a single document entry returned by a folder listing. */
+export type FolderEntry = {
+  /** Path from the documents root, without the .md extension (e.g. "my-doc" or "category/my-doc"). */
+  slug: string;
+  /** The first H1 heading found in the document, or null if none exists. */
+  title: string | null;
+};
+
+/** Lists all Markdown documents in a folder inside the documents directory.
+ * Returns an array of entries (possibly empty) when the folder exists,
+ * or null when the folder does not exist.
+ *
+ * @param folderPath Path relative to the documents root (default: "" for the root).
+ * @param folderName The root folder name (default: "documents").
+ * @returns A promise resolving to an array of FolderEntry objects, or null if the folder does not exist.
+ * @example
+ * const entries = await listFolder(); // lists documents in "documents/"
+ * const entries = await listFolder("category"); // lists documents in "documents/category/"
+ */
+export async function listFolder(
+  folderPath: string = "",
+  folderName: string = "documents"
+): Promise<FolderEntry[] | null> {
+  const dir = join(import.meta.dir, "..", folderName, folderPath);
+
+  let dirEntries: import("fs").Dirent[];
+  try {
+    dirEntries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  const results: FolderEntry[] = [];
+  for (const entry of dirEntries) {
+    if (entry.isFile() && entry.name.endsWith(".md")) {
+      const baseName = entry.name.slice(0, -3);
+      const slug = folderPath ? `${folderPath}/${baseName}` : baseName;
+      const filePath = join(dir, entry.name);
+      const content = await Bun.file(filePath).text();
+      const headingMatch = content.match(/^#\s+(.+)$/m);
+      results.push({
+        slug,
+        title: headingMatch ? headingMatch[1].trim() : null,
+      });
+    }
+  }
+
+  return results;
 }
