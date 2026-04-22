@@ -6,7 +6,7 @@ const SAFE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/; //validates URL-safe document sl
 /** Represents the outcome of a save-document operation. */
 export type SaveDocumentResult = "created" | "conflict" | "invalid";
 /** Represents the outcome of a delete-document operation. */
-export type DeleteDocumentResult = "deleted" | "not-found" | "invalid";
+export type DeleteDocumentResult = "deleted" | "not_found" | "invalid";
 /** Represents the outcome of an update-document operation. */
 export type UpdateDocumentResult = "updated" | "not_found" | "invalid";
 
