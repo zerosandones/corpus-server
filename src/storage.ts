@@ -95,7 +95,7 @@ export async function saveDocument(
  * The slug may include forward-slash-separated path segments (e.g., "category/my-doc").
  * Each path segment must be in kebab-case format (lowercase letters, numbers, and hyphens).
  * Returns "deleted" when the document is removed successfully,
- * "not-found" when no document exists at that path,
+ * "not_found" when no document exists at that path,
  * and "invalid" when any path segment fails validation.
  *
  * @param slug The document slug, optionally including subdirectory segments (e.g., "category/my-doc").
@@ -127,7 +127,7 @@ export async function deleteDocument(
       typeof error.code === "string" &&
       error.code === "ENOENT"
     ) {
-      return "not-found";
+      return "not_found";
     }
 
     throw error;

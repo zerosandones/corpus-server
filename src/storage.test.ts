@@ -179,9 +179,9 @@ describe("storage", () => {
       expect(await Bun.file(filePath).exists()).toBe(false);
     });
 
-    test("returns 'not-found' for a non-existent document", async () => {
+    test("returns 'not_found' for a non-existent document", async () => {
       const result = await deleteDocument("does-not-exist", "temp");
-      expect(result).toBe("not-found");
+      expect(result).toBe("not_found");
     });
 
     test("returns 'invalid' for slug with uppercase letters", async () => {

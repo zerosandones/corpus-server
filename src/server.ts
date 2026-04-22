@@ -63,7 +63,7 @@ const server = Bun.serve({
           console.log(`Document deleted for slug: ${slug}`);
           return new Response("OK", { status: 200 });
         }
-        if (result === "not-found") {
+        if (result === "not_found") {
           console.log(`Document not found for DELETE: ${slug}`);
           return new Response("Not found", { status: 404 });
         }
