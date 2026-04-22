@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach, afterAll } from "bun:test";
 import { rm, stat, writeFile } from "fs/promises";
 import { join } from "path";
-import { deleteDocument, ensureDocsDir, getDocument, saveDocument } from "./storage";
+import { ensureDocsDir, getDocument, saveDocument, updateDocument, deleteDocument } from "./storage";
 
 const testDocsDir = join(import.meta.dir, "..", "temp");
 
@@ -201,6 +201,45 @@ describe("storage", () => {
       expect(result).toBe("deleted");
       const filePath = join(testDocsDir, "cat", "nested-del.md");
       expect(await Bun.file(filePath).exists()).toBe(false);
+    });
+  });
+       
+ describe("updateDocument", () => {
+    beforeEach(async () => {
+      await ensureDocsDir("temp");
+    });
+
+    test("updates an existing document and returns 'updated'", async () => {
+      const testSlug = "update-doc";
+      const filePath = join(testDocsDir, `${testSlug}.md`);
+      await writeFile(filePath, "# Original");
+      const result = await updateDocument(testSlug, "# Updated", "temp");
+      expect(result).toBe("updated");
+      expect(await Bun.file(filePath).text()).toBe("# Updated");
+    });
+
+    test("returns 'not_found' when document does not exist", async () => {
+      const result = await updateDocument("does-not-exist", "# Content", "temp");
+      expect(result).toBe("not_found");
+    });
+
+    test("returns 'invalid' for slug with uppercase letters", async () => {
+      const result = await updateDocument("Invalid-Doc", "content", "temp");
+      expect(result).toBe("invalid");
+    });
+
+    test("returns 'invalid' for empty slug", async () => {
+      const result = await updateDocument("", "content", "temp");
+      expect(result).toBe("invalid");
+    });
+
+    test("updates a nested document and returns 'updated'", async () => {
+      const testSlug = "nested/update-doc";
+      await saveDocument(testSlug, "# Original", "temp");
+      const result = await updateDocument(testSlug, "# Updated", "temp");
+      expect(result).toBe("updated");
+      const filePath = join(testDocsDir, "nested", "update-doc.md");
+      expect(await Bun.file(filePath).text()).toBe("# Updated");
     });
   });
 });
