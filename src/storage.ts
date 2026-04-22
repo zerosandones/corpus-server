@@ -91,9 +91,42 @@ export async function saveDocument(
 export type FolderEntry = {
   /** Path from the documents root, without the .md extension (e.g. "my-doc" or "category/my-doc"). */
   slug: string;
-  /** The first H1 heading found in the document, or null if none exists. */
+  /** The title: first the frontmatter `title` field, then the first H1 heading, or null if neither exists. */
   title: string | null;
+  /** Parsed YAML frontmatter key/value pairs, or null if no frontmatter is present. */
+  frontmatter: Record<string, string | string[]> | null;
 };
+
+/**
+ * Parses a YAML frontmatter block from a Markdown document.
+ * Supports simple scalar values and inline arrays (`[a, b, c]`).
+ * Returns null when no valid frontmatter block is found.
+ */
+function parseFrontmatter(content: string): Record<string, string | string[]> | null {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) return null;
+
+  const result: Record<string, string | string[]> = {};
+  for (const line of match[1].split(/\r?\n/)) {
+    const colonIdx = line.indexOf(":");
+    if (colonIdx === -1) continue;
+    const key = line.slice(0, colonIdx).trim();
+    const rawValue = line.slice(colonIdx + 1).trim();
+    if (!key) continue;
+
+    if (rawValue.startsWith("[") && rawValue.endsWith("]")) {
+      result[key] = rawValue
+        .slice(1, -1)
+        .split(",")
+        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+        .filter(Boolean);
+    } else {
+      result[key] = rawValue.replace(/^["']|["']$/g, "");
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : null;
+}
 
 /** Lists all Markdown documents in a folder inside the documents directory.
  * Returns an array of entries (possibly empty) when the folder exists,
@@ -126,10 +159,14 @@ export async function listFolder(
       const slug = folderPath ? `${folderPath}/${baseName}` : baseName;
       const filePath = join(dir, entry.name);
       const content = await Bun.file(filePath).text();
+      const fm = parseFrontmatter(content);
+      const frontmatterTitle = typeof fm?.["title"] === "string" ? fm["title"] : null;
       const headingMatch = content.match(/^#\s+(.+)$/m);
+      const headingTitle = headingMatch ? headingMatch[1].trim() : null;
       results.push({
         slug,
-        title: headingMatch ? headingMatch[1].trim() : null,
+        title: frontmatterTitle ?? headingTitle,
+        frontmatter: fm,
       });
     }
   }

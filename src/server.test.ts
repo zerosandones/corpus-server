@@ -138,6 +138,19 @@ describe("folder index", () => {
     expect(body).toContain("[no-heading-doc](/no-heading-doc)");
     await unlink(filePath);
   });
+
+  test("includes frontmatter properties as sub-list in index", async () => {
+    const filePath = join(documentsDir, "fm-index-doc.md");
+    await Bun.write(filePath, '---\ntitle: "FM Index Doc"\nslug: "fm-index-doc"\nsecurity: "public"\n---\n\n# H1 Title');
+    const response = await fetch(new URL("/", server.url));
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toContain("[FM Index Doc](/fm-index-doc)");
+    expect(body).toContain("  - title: FM Index Doc");
+    expect(body).toContain("  - slug: fm-index-doc");
+    expect(body).toContain("  - security: public");
+    await unlink(filePath);
+  });
 });
 
 afterAll(() => {

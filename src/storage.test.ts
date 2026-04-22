@@ -191,6 +191,7 @@ describe("storage", () => {
       const entry = result!.find((e) => e.slug === "list-doc");
       expect(entry).toBeDefined();
       expect(entry!.title).toBe("Listed Doc");
+      expect(entry!.frontmatter).toBeNull();
     });
 
     test("returns null title when document has no H1 heading", async () => {
@@ -201,6 +202,7 @@ describe("storage", () => {
       const entry = result!.find((e) => e.slug === "no-heading");
       expect(entry).toBeDefined();
       expect(entry!.title).toBeNull();
+      expect(entry!.frontmatter).toBeNull();
     });
 
     test("returns entries with correct slug for a subfolder", async () => {
@@ -213,6 +215,7 @@ describe("storage", () => {
       expect(result!.length).toBe(1);
       expect(result![0].slug).toBe("sub/sub-doc");
       expect(result![0].title).toBe("Sub Doc");
+      expect(result![0].frontmatter).toBeNull();
     });
 
     test("does not include non-markdown files", async () => {
@@ -222,6 +225,38 @@ describe("storage", () => {
       expect(result).not.toBeNull();
       const entry = result!.find((e) => e.slug === "not-markdown");
       expect(entry).toBeUndefined();
+    });
+
+    test("parses frontmatter and uses its title field", async () => {
+      const filePath = join(testDocsDir, "fm-doc.md");
+      await writeFile(filePath, '---\ntitle: "Frontmatter Title"\nslug: "fm-doc"\nsecurity: "public"\n---\n\n# H1 Title');
+      const result = await listFolder("", "temp");
+      expect(result).not.toBeNull();
+      const entry = result!.find((e) => e.slug === "fm-doc");
+      expect(entry).toBeDefined();
+      expect(entry!.title).toBe("Frontmatter Title");
+      expect(entry!.frontmatter).toMatchObject({ title: "Frontmatter Title", slug: "fm-doc", security: "public" });
+    });
+
+    test("falls back to H1 heading when frontmatter has no title field", async () => {
+      const filePath = join(testDocsDir, "fm-no-title.md");
+      await writeFile(filePath, "---\nsecurity: \"public\"\n---\n\n# H1 Title");
+      const result = await listFolder("", "temp");
+      expect(result).not.toBeNull();
+      const entry = result!.find((e) => e.slug === "fm-no-title");
+      expect(entry).toBeDefined();
+      expect(entry!.title).toBe("H1 Title");
+      expect(entry!.frontmatter).toMatchObject({ security: "public" });
+    });
+
+    test("parses frontmatter array values", async () => {
+      const filePath = join(testDocsDir, "fm-array.md");
+      await writeFile(filePath, "---\ntitle: Array Doc\ntags: [alpha, beta]\n---\n");
+      const result = await listFolder("", "temp");
+      expect(result).not.toBeNull();
+      const entry = result!.find((e) => e.slug === "fm-array");
+      expect(entry).toBeDefined();
+      expect(entry!.frontmatter).toMatchObject({ tags: ["alpha", "beta"] });
     });
   });
 });
