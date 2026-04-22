@@ -53,7 +53,10 @@ const server = Bun.serve({
     }
 
     if (req.method === "DELETE" && pathMatch) {
-      const slug = pathMatch[1];
+      const slug = pathMatch.at(1);
+      if (slug === undefined) {
+        return new Response("Not found", { status: 404 });
+      }
       try {
         const result = await deleteDocument(slug);
         if (result === "deleted") {
