@@ -20,7 +20,7 @@ const server = Bun.serve({
     const pathMatch = pathname.match(/^\/(.+)$/);
 
     if (req.method === "PUT" && pathMatch) {
-      const slug = pathMatch[1];
+      const slug = pathMatch[1] as string;
       const content = await req.text();
       const result = await updateDocument(slug, content);
       if (result === "updated") {
@@ -37,7 +37,7 @@ const server = Bun.serve({
     }
 
     if (req.method === "POST" && pathMatch) {
-      const slug = pathMatch[1];
+      const slug = pathMatch[1] as string;
       const content = await req.text();
       const result = await saveDocument(slug, content);
       if (result === "created") {
@@ -75,6 +75,6 @@ const server = Bun.serve({
   }
 
 })
-console.log(`corpus-server listening on http://localhost:${server.port}`);
+console.log(`corpus-server listening on port ${server.port}`);
 
 export default server;
