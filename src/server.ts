@@ -1,4 +1,3 @@
-import type { BunRequest } from "bun";
 import { ensureDocsDir, getDocument, saveDocument, updateDocument, deleteDocument } from "./storage";
 
 console.log("Starting server...");
