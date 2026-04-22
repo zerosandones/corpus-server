@@ -115,14 +115,23 @@ export async function deleteDocument(
   }
 
   const filePath = join(import.meta.dir, "..", folderName, `${slug}.md`);
-  const file = Bun.file(filePath);
 
-  if (!(await file.exists())) {
-    return "not-found";
+  try {
+    await unlink(filePath);
+    return "deleted";
+  } catch (error: unknown) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      typeof error.code === "string" &&
+      error.code === "ENOENT"
+    ) {
+      return "not-found";
+    }
+
+    throw error;
   }
-
-  await unlink(filePath);
-  return "deleted";
 }
 
 
