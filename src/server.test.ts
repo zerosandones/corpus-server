@@ -95,6 +95,36 @@ describe("document uploading", () => {
   });
 });
 
+describe("document deleting", () => {
+  const deleteSlug = "delete-test-doc";
+  const deleteFilePath = join(documentsDir, `${deleteSlug}.md`);
+  const deleteContent = "# Delete Test\n\nTo be deleted.";
+
+  test("returns 200 when an existing document is deleted via DELETE", async () => {
+    await Bun.write(deleteFilePath, deleteContent);
+    const response = await fetch(new URL(`/${deleteSlug}`, server.url), {
+      method: "DELETE",
+    });
+    expect(response.status).toBe(200);
+    expect(await Bun.file(deleteFilePath).exists()).toBe(false);
+  });
+
+  test("returns 404 when document does not exist via DELETE", async () => {
+    const response = await fetch(new URL("/no-such-document", server.url), {
+      method: "DELETE",
+    });
+    expect(response.status).toBe(404);
+  });
+
+  test("returns 404 when DELETE slug is invalid", async () => {
+    const response = await fetch(new URL("/Invalid-Slug", server.url), {
+      method: "DELETE",
+    });
+    expect(response.status).toBe(404);
+  });
+});
+      
+      
 describe("document updating", () => {
   const updateSlug = "update-test-doc";
   const updateFilePath = join(documentsDir, `${updateSlug}.md`);
@@ -128,6 +158,7 @@ describe("document updating", () => {
     expect(response.status).toBe(400);
   });
 });
+
 
 afterAll(() => {
   server.stop(true);
