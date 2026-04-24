@@ -19,18 +19,45 @@ export function splitMarkdown(content: string): { frontmatter: string; body: str
 }
 
 /**
- * Reads the `ENCRYPTION_KEY` environment variable and imports it as an AES-256-GCM CryptoKey.
- * The variable must be a 64-character lowercase hex string (32 bytes).
+ * Loads the AES-256-GCM encryption key for document bodies.
  *
- * @throws If `ENCRYPTION_KEY` is absent or malformed.
+ * The key is resolved from one of two sources, checked in this order:
+ *
+ * 1. **`ENCRYPTION_KEY_FILE`** — path to a file whose content is the 64-character
+ *    hex key.  Use this with Docker secrets (`/run/secrets/<name>`) or Kubernetes
+ *    secret volume mounts so the key is never stored in an environment variable and
+ *    is not visible via `docker inspect` or `/proc/self/environ`.
+ *
+ * 2. **`ENCRYPTION_KEY`** — the 64-character hex key supplied directly as an
+ *    environment variable.  Convenient for local development and CI, but less
+ *    secure in production because environment variables can be read by any process
+ *    running as the same user and are surfaced by container inspection tools.
+ *
+ * The resolved value must be a 64-character hex string (32 bytes, AES-256).
+ *
+ * @throws If neither variable is set, or if the resolved value is malformed.
  */
 export async function getEncryptionKey(): Promise<CryptoKey> {
-  const hex = process.env["ENCRYPTION_KEY"];
+  let hex: string | undefined;
+
+  const keyFile = process.env["ENCRYPTION_KEY_FILE"];
+  if (keyFile) {
+    const file = Bun.file(keyFile);
+    if (!(await file.exists())) {
+      throw new Error(`ENCRYPTION_KEY_FILE path does not exist: ${keyFile}`);
+    }
+    hex = (await file.text()).trim();
+  } else {
+    hex = process.env["ENCRYPTION_KEY"];
+  }
+
   if (!hex) {
-    throw new Error("ENCRYPTION_KEY environment variable is not set");
+    throw new Error(
+      "No encryption key configured. Set ENCRYPTION_KEY_FILE (recommended) or ENCRYPTION_KEY.",
+    );
   }
   if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
-    throw new Error("ENCRYPTION_KEY must be a 64-character hex string (32 bytes for AES-256)");
+    throw new Error("Encryption key must be a 64-character hex string (32 bytes for AES-256)");
   }
   const raw = Buffer.from(hex, "hex");
   return crypto.subtle.importKey(

@@ -1,5 +1,7 @@
-import { describe, expect, test, beforeAll } from "bun:test";
+import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { splitMarkdown, getEncryptionKey, encryptBody, decryptBody } from "./crypto";
+import { writeFile, unlink } from "fs/promises";
+import { join } from "path";
 
 const TEST_KEY_HEX = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
 
@@ -50,25 +52,85 @@ describe("crypto", () => {
       expect(key.algorithm.name).toBe("AES-GCM");
     });
 
-    test("throws when ENCRYPTION_KEY is not set", async () => {
+    test("throws when neither ENCRYPTION_KEY nor ENCRYPTION_KEY_FILE is set", async () => {
       const original = process.env["ENCRYPTION_KEY"];
       delete process.env["ENCRYPTION_KEY"];
-      await expect(getEncryptionKey()).rejects.toThrow("ENCRYPTION_KEY environment variable is not set");
+      await expect(getEncryptionKey()).rejects.toThrow(
+        "No encryption key configured. Set ENCRYPTION_KEY_FILE (recommended) or ENCRYPTION_KEY.",
+      );
       process.env["ENCRYPTION_KEY"] = original;
     });
 
     test("throws when ENCRYPTION_KEY has wrong length", async () => {
       const original = process.env["ENCRYPTION_KEY"];
       process.env["ENCRYPTION_KEY"] = "tooshort";
-      await expect(getEncryptionKey()).rejects.toThrow("ENCRYPTION_KEY must be a 64-character hex string");
+      await expect(getEncryptionKey()).rejects.toThrow("Encryption key must be a 64-character hex string");
       process.env["ENCRYPTION_KEY"] = original;
     });
 
     test("throws when ENCRYPTION_KEY contains non-hex characters", async () => {
       const original = process.env["ENCRYPTION_KEY"];
       process.env["ENCRYPTION_KEY"] = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
-      await expect(getEncryptionKey()).rejects.toThrow("ENCRYPTION_KEY must be a 64-character hex string");
+      await expect(getEncryptionKey()).rejects.toThrow("Encryption key must be a 64-character hex string");
       process.env["ENCRYPTION_KEY"] = original;
+    });
+
+    test("loads key from ENCRYPTION_KEY_FILE when set", async () => {
+      const keyFilePath = join(import.meta.dir, "..", "temp-key-file.txt");
+      await writeFile(keyFilePath, TEST_KEY_HEX);
+      const originalEnv = process.env["ENCRYPTION_KEY"];
+      delete process.env["ENCRYPTION_KEY"];
+      process.env["ENCRYPTION_KEY_FILE"] = keyFilePath;
+      try {
+        const key = await getEncryptionKey();
+        expect(key).toBeInstanceOf(CryptoKey);
+        expect(key.algorithm.name).toBe("AES-GCM");
+      } finally {
+        delete process.env["ENCRYPTION_KEY_FILE"];
+        process.env["ENCRYPTION_KEY"] = originalEnv;
+        await unlink(keyFilePath);
+      }
+    });
+
+    test("ENCRYPTION_KEY_FILE takes precedence over ENCRYPTION_KEY", async () => {
+      const keyFilePath = join(import.meta.dir, "..", "temp-key-file-2.txt");
+      await writeFile(keyFilePath, TEST_KEY_HEX);
+      process.env["ENCRYPTION_KEY_FILE"] = keyFilePath;
+      try {
+        const key = await getEncryptionKey();
+        expect(key).toBeInstanceOf(CryptoKey);
+      } finally {
+        delete process.env["ENCRYPTION_KEY_FILE"];
+        await unlink(keyFilePath);
+      }
+    });
+
+    test("throws when ENCRYPTION_KEY_FILE points to a non-existent file", async () => {
+      const originalEnv = process.env["ENCRYPTION_KEY"];
+      delete process.env["ENCRYPTION_KEY"];
+      process.env["ENCRYPTION_KEY_FILE"] = "/no/such/file.txt";
+      try {
+        await expect(getEncryptionKey()).rejects.toThrow("ENCRYPTION_KEY_FILE path does not exist");
+      } finally {
+        delete process.env["ENCRYPTION_KEY_FILE"];
+        process.env["ENCRYPTION_KEY"] = originalEnv;
+      }
+    });
+
+    test("trims surrounding whitespace from the key file content", async () => {
+      const keyFilePath = join(import.meta.dir, "..", "temp-key-file-3.txt");
+      await writeFile(keyFilePath, `\n  ${TEST_KEY_HEX}  \n`);
+      const originalEnv = process.env["ENCRYPTION_KEY"];
+      delete process.env["ENCRYPTION_KEY"];
+      process.env["ENCRYPTION_KEY_FILE"] = keyFilePath;
+      try {
+        const key = await getEncryptionKey();
+        expect(key).toBeInstanceOf(CryptoKey);
+      } finally {
+        delete process.env["ENCRYPTION_KEY_FILE"];
+        process.env["ENCRYPTION_KEY"] = originalEnv;
+        await unlink(keyFilePath);
+      }
     });
   });
 
