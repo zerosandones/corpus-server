@@ -5,12 +5,13 @@ import {
   beforeEach,
   afterAll,
 } from "bun:test";
-import { rm, stat, writeFile } from "fs/promises";
+import { mkdir, rm, stat, writeFile } from "fs/promises";
 import { join } from "path";
 import {
   deleteDocument,
   ensureDocsDir,
   getDocument,
+  listFolder,
   saveDocument,
   updateDocument,
 } from "./storage";

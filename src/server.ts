@@ -4,6 +4,7 @@ import {
   saveDocument,
   updateDocument,
   deleteDocument,
+  listFolder,
 } from "./storage";
 import { formatFolderIndex } from "./response-formatter";
 

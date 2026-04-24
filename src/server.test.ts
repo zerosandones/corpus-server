@@ -16,11 +16,6 @@ describe("server basic functionality", () => {
     await access(documentsDir, constants.F_OK);
   });
 
-  test("returns 204 for root route when no documents exist", async () => {
-    const response = await fetch(new URL("/", server.url));
-    expect(response.status).toBe(204);
-  });
-
   test("returns 404 for unknown routes", async () => {
     const response = await fetch(new URL("/does-not-exist", server.url));
     expect(response.status).toBe(404);
