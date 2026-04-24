@@ -153,6 +153,70 @@ describe("folder index", () => {
   });
 });
 
+describe("document deleting", () => {
+  const deleteSlug = "delete-test-doc";
+  const deleteFilePath = join(documentsDir, `${deleteSlug}.md`);
+  const deleteContent = "# Delete Test\n\nTo be deleted.";
+
+  test("returns 200 when an existing document is deleted via DELETE", async () => {
+    await Bun.write(deleteFilePath, deleteContent);
+    const response = await fetch(new URL(`/${deleteSlug}`, server.url), {
+      method: "DELETE",
+    });
+    expect(response.status).toBe(200);
+    expect(await Bun.file(deleteFilePath).exists()).toBe(false);
+  });
+
+  test("returns 404 when document does not exist via DELETE", async () => {
+    const response = await fetch(new URL("/no-such-document", server.url), {
+      method: "DELETE",
+    });
+    expect(response.status).toBe(404);
+  });
+
+  test("returns 404 when DELETE slug is invalid", async () => {
+    const response = await fetch(new URL("/Invalid-Slug", server.url), {
+      method: "DELETE",
+    });
+    expect(response.status).toBe(404);
+  });
+});
+    
+describe("document updating", () => {
+  const updateSlug = "update-test-doc";
+  const updateFilePath = join(documentsDir, `${updateSlug}.md`);
+  const originalContent = "# Original Content";
+  const updatedContent = "# Updated Content";
+
+  test("returns 200 when an existing document is updated via PUT", async () => {
+    await Bun.write(updateFilePath, originalContent);
+    const response = await fetch(new URL(`/${updateSlug}`, server.url), {
+      method: "PUT",
+      body: updatedContent,
+    });
+    expect(response.status).toBe(200);
+    expect(await Bun.file(updateFilePath).text()).toBe(updatedContent);
+    await unlink(updateFilePath);
+  });
+
+  test("returns 404 when document does not exist via PUT", async () => {
+    const response = await fetch(new URL("/no-such-document", server.url), {
+      method: "PUT",
+      body: updatedContent,
+    });
+    expect(response.status).toBe(404);
+  });
+
+  test("returns 400 when PUT slug is invalid", async () => {
+    const response = await fetch(new URL("/Invalid-Slug", server.url), {
+      method: "PUT",
+      body: "# Content",
+    });
+    expect(response.status).toBe(400);
+  });
+});
+
+
 afterAll(() => {
   server.stop(true);
 });
