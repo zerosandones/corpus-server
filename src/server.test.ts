@@ -2,6 +2,10 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { access, mkdir, rm, unlink } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
+
+// Must be set before any request handling that touches storage encryption
+process.env["ENCRYPTION_KEY"] = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+
 import server from "./server";
 
 const documentsDir = join(import.meta.dir, "..", "documents");
@@ -29,7 +33,11 @@ describe("document serving", () => {
   const testContent = "# Test Document\n\nThis is a test.";
 
   test("returns a document with text/markdown content-type", async () => {
-    await Bun.write(testFilePath, testContent);
+    // Create the document via POST instead of direct file write so the body is properly encrypted on disk
+    await fetch(new URL(`/${testSlug}`, server.url), {
+      method: "POST",
+      body: testContent,
+    });
     const response = await fetch(new URL(`/${testSlug}`, server.url));
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toContain("text/markdown");
@@ -190,7 +198,9 @@ describe("document updating", () => {
       body: updatedContent,
     });
     expect(response.status).toBe(200);
-    expect(await Bun.file(updateFilePath).text()).toBe(updatedContent);
+    // Verify the updated content is returned correctly via GET (decryption round-trip)
+    const getResponse = await fetch(new URL(`/${updateSlug}`, server.url));
+    expect(await getResponse.text()).toBe(updatedContent);
     await unlink(updateFilePath);
   });
 
