@@ -1,4 +1,4 @@
-import { mkdir, unlink } from "fs/promises";
+import { mkdir, readdir, unlink } from "fs/promises";
 import { join } from "path";
 
 const SAFE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/; //validates URL-safe document slugs in kebab-case format
@@ -103,6 +103,92 @@ export async function saveDocument(
   return "created";
 }
 
+/** Represents a single document entry returned by a folder listing. */
+export type FolderEntry = {
+  /** Path from the documents root, without the .md extension (e.g. "my-doc" or "category/my-doc"). */
+  slug: string;
+  /** The title: first the frontmatter `title` field, then the first H1 heading, or null if neither exists. */
+  title: string | null;
+  /** Parsed YAML frontmatter key/value pairs, or null if no frontmatter is present. */
+  frontmatter: Record<string, string | string[]> | null;
+};
+
+/**
+ * Parses a YAML frontmatter block from a Markdown document.
+ * Supports simple scalar values and inline arrays (`[a, b, c]`).
+ * Returns null when no valid frontmatter block is found.
+ */
+function parseFrontmatter(content: string): Record<string, string | string[]> | null {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) return null;
+
+  const result: Record<string, string | string[]> = {};
+  for (const line of match.at(1)!.split(/\r?\n/)) {
+    const colonIdx = line.indexOf(":");
+    if (colonIdx === -1) continue;
+    const key = line.slice(0, colonIdx).trim();
+    const rawValue = line.slice(colonIdx + 1).trim();
+    if (!key) continue;
+
+    if (rawValue.startsWith("[") && rawValue.endsWith("]")) {
+      result[key] = rawValue
+        .slice(1, -1)
+        .split(",")
+        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+        .filter(Boolean);
+    } else {
+      result[key] = rawValue.replace(/^["']|["']$/g, "");
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+/** Lists all Markdown documents in a folder inside the documents directory.
+ * Returns an array of entries (possibly empty) when the folder exists,
+ * or null when the folder does not exist.
+ *
+ * @param folderPath Path relative to the documents root (default: "" for the root).
+ * @param folderName The name of the base directory (relative to the project root) that contains all documents (default: "documents").
+ * @returns A promise resolving to an array of FolderEntry objects, or null if the folder does not exist.
+ * @example
+ * const entries = await listFolder(); // lists documents in "documents/"
+ * const entries = await listFolder("category"); // lists documents in "documents/category/"
+ */
+export async function listFolder(
+  folderPath: string = "",
+  folderName: string = "documents"
+): Promise<FolderEntry[] | null> {
+  const dir = join(import.meta.dir, "..", folderName, folderPath);
+
+  let dirEntries: import("fs").Dirent[];
+  try {
+    dirEntries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  const results: FolderEntry[] = [];
+  for (const entry of dirEntries) {
+    if (entry.isFile() && entry.name.endsWith(".md")) {
+      const baseName = entry.name.slice(0, -3);
+      const slug = folderPath ? `${folderPath}/${baseName}` : baseName;
+      const filePath = join(dir, entry.name);
+      const content = await Bun.file(filePath).text();
+      const fm = parseFrontmatter(content);
+      const frontmatterTitle = typeof fm?.["title"] === "string" ? fm["title"] : null;
+      const headingMatch = content.match(/^#\s+(.+)$/m);
+      const headingTitle = headingMatch ? headingMatch.at(1)!.trim() : null;
+      results.push({
+        slug,
+        title: frontmatterTitle ?? headingTitle,
+        frontmatter: fm,
+      });
+    }
+  }
+
+  return results;
+}
 /** Deletes a document at the specified slug path.
  * The slug may include forward-slash-separated path segments (e.g., "category/my-doc").
  * Each path segment must be in kebab-case format (lowercase letters, numbers, and hyphens).

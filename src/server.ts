@@ -4,7 +4,9 @@ import {
   saveDocument,
   updateDocument,
   deleteDocument,
+  listFolder,
 } from "./storage";
+import { formatFolderIndex } from "./response-formatter";
 
 console.log("Starting server...");
 
@@ -41,7 +43,11 @@ const server = Bun.serve({
     }
 
     if (req.method === "POST" && pathMatch) {
-      const slug = pathMatch[1] as string;
+      const slug =  pathMatch.at(1);
+      if (!slug) {
+        console.log("Invalid slug in POST request");
+        return new Response("Bad Request", { status: 400 });
+      }
       const content = await req.text();
       const result = await saveDocument(slug, content);
       if (result === "created") {
@@ -81,6 +87,18 @@ const server = Bun.serve({
         return new Response("Internal Server Error", { status: 500 });
       }
     }
+    
+    if (req.method === "GET" && pathname === "/") {
+      console.log("Listing root folder index");
+      const entries = await listFolder();
+      if (entries === null || entries.length === 0) {
+        return new Response(null, { status: 204 });
+      }
+      return new Response(formatFolderIndex("Index", entries), {
+        status: 200,
+        headers: { "Content-Type": "text/markdown; charset=utf-8" },
+      });
+    }
 
     // Match /:slug — single path segment, no extension
     const match = pathname.match(/^\/([^/]+)$/);
@@ -94,6 +112,19 @@ const server = Bun.serve({
           headers: {
             "Content-Type": "text/markdown; charset=utf-8",
           },
+        });
+      }
+
+      const folderEntries = await listFolder(slug);
+      if (folderEntries !== null) {
+        if (folderEntries.length === 0) {
+          console.log(`Empty folder for slug: ${slug}`);
+          return new Response(null, { status: 204 });
+        }
+        console.log(`Serving folder index for slug: ${slug}`);
+        return new Response(formatFolderIndex(slug, folderEntries), {
+          status: 200,
+          headers: { "Content-Type": "text/markdown; charset=utf-8" },
         });
       }
     }
