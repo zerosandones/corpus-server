@@ -15,6 +15,10 @@ import {
   saveDocument,
   updateDocument,
 } from "./storage";
+import { decryptBody, getEncryptionKey, splitMarkdown } from "./crypto";
+
+// Must be set before any test that calls saveDocument / getDocument / updateDocument
+process.env["ENCRYPTION_KEY"] = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
 
 const testDocsDir = join(import.meta.dir, "..", "temp");
 
@@ -40,8 +44,7 @@ describe("storage", () => {
     test("returns document content for valid slug", async () => {
       const testSlug = "valid-doc";
       const testContent = "# Test Document\n\nThis is a test.";
-      const filePath = join(testDocsDir, `${testSlug}.md`);
-      await writeFile(filePath, testContent);
+      await saveDocument(testSlug, testContent, "temp");
 
       const result = await getDocument(testSlug, "temp");
       expect(result).toBe(testContent);
@@ -80,8 +83,7 @@ describe("storage", () => {
     test("accepts valid multi-word slug with hyphens", async () => {
       const testSlug = "my-awesome-document";
       const testContent = "# My Awesome Document";
-      const filePath = join(testDocsDir, `${testSlug}.md`);
-      await writeFile(filePath, testContent);
+      await saveDocument(testSlug, testContent, "temp");
 
       const result = await getDocument(testSlug, "temp");
       expect(result).toBe(testContent);
@@ -90,8 +92,7 @@ describe("storage", () => {
     test("accepts slug with numbers", async () => {
       const testSlug = "doc-123";
       const testContent = "# Document 123";
-      const filePath = join(testDocsDir, `${testSlug}.md`);
-      await writeFile(filePath, testContent);
+      await saveDocument(testSlug, testContent, "temp");
 
       const result = await getDocument(testSlug, "temp");
       expect(result).toBe(testContent);
@@ -123,8 +124,11 @@ describe("storage", () => {
       const testContent = "# New Document";
       const result = await saveDocument(testSlug, testContent, "temp");
       expect(result).toBe("created");
+      // Verify round-trip through decryption
+      expect(await getDocument(testSlug, "temp")).toBe(testContent);
+      // Verify the file on disk does NOT contain the plaintext body
       const filePath = join(testDocsDir, `${testSlug}.md`);
-      expect(await Bun.file(filePath).text()).toBe(testContent);
+      expect(await Bun.file(filePath).text()).not.toBe(testContent);
     });
 
     test("returns 'conflict' when document already exists", async () => {
@@ -140,8 +144,12 @@ describe("storage", () => {
       const testContent = "# Sub Document";
       const result = await saveDocument(testSlug, testContent, "temp");
       expect(result).toBe("created");
+      // Verify round-trip via direct decrypt (getDocument does not support slashed slugs)
       const filePath = join(testDocsDir, "category", "sub-doc.md");
-      expect(await Bun.file(filePath).text()).toBe(testContent);
+      const raw = await Bun.file(filePath).text();
+      const { frontmatter, body } = splitMarkdown(raw);
+      const key = await getEncryptionKey();
+      expect(frontmatter + (await decryptBody(body, key))).toBe(testContent);
     });
 
     test("returns 'created' for deeply nested path", async () => {
@@ -324,7 +332,7 @@ describe("storage", () => {
       await writeFile(filePath, "# Original");
       const result = await updateDocument(testSlug, "# Updated", "temp");
       expect(result).toBe("updated");
-      expect(await Bun.file(filePath).text()).toBe("# Updated");
+      expect(await getDocument(testSlug, "temp")).toBe("# Updated");
     });
 
     test("returns 'not_found' when document does not exist", async () => {
@@ -351,8 +359,12 @@ describe("storage", () => {
       await saveDocument(testSlug, "# Original", "temp");
       const result = await updateDocument(testSlug, "# Updated", "temp");
       expect(result).toBe("updated");
+      // Verify round-trip via direct decrypt (getDocument does not support slashed slugs)
       const filePath = join(testDocsDir, "nested", "update-doc.md");
-      expect(await Bun.file(filePath).text()).toBe("# Updated");
+      const raw = await Bun.file(filePath).text();
+      const { frontmatter, body } = splitMarkdown(raw);
+      const key = await getEncryptionKey();
+      expect(frontmatter + (await decryptBody(body, key))).toBe("# Updated");
     });
   });
 
