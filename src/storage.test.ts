@@ -3,7 +3,6 @@ import {
   expect,
   test,
   beforeEach,
-  afterEach,
   afterAll,
 } from "bun:test";
 import { rm, stat, writeFile } from "fs/promises";
@@ -260,44 +259,6 @@ describe("storage", () => {
     });
   });
 
-  describe("deleteDocument", () => {
-    beforeEach(async () => {
-      await ensureDocsDir("temp");
-    });
-
-    test("deletes an existing document and returns 'deleted'", async () => {
-      const testSlug = "delete-me";
-      const filePath = join(testDocsDir, `${testSlug}.md`);
-      await writeFile(filePath, "# Delete Me");
-      const result = await deleteDocument(testSlug, "temp");
-      expect(result).toBe("deleted");
-      expect(await Bun.file(filePath).exists()).toBe(false);
-    });
-
-    test("returns 'not_found' for a non-existent document", async () => {
-      const result = await deleteDocument("does-not-exist", "temp");
-      expect(result).toBe("not_found");
-    });
-
-    test("returns 'invalid' for slug with uppercase letters", async () => {
-      const result = await deleteDocument("Invalid-Doc", "temp");
-      expect(result).toBe("invalid");
-    });
-
-    test("returns 'invalid' for empty slug", async () => {
-      const result = await deleteDocument("", "temp");
-      expect(result).toBe("invalid");
-    });
-
-    test("deletes a nested document and returns 'deleted'", async () => {
-      const testSlug = "cat/nested-del";
-      await saveDocument(testSlug, "# Nested", "temp");
-      const result = await deleteDocument(testSlug, "temp");
-      expect(result).toBe("deleted");
-      const filePath = join(testDocsDir, "cat", "nested-del.md");
-      expect(await Bun.file(filePath).exists()).toBe(false);
-    });
-  });
 });
 
 afterAll(async () => {

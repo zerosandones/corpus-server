@@ -119,7 +119,7 @@ export async function saveDocument(
  */
 export async function deleteDocument(
   slug: string,
-  folderName: string = "documents"
+  folderName: string = "documents",
 ): Promise<DeleteDocumentResult> {
   const segments = slug.split("/");
   if (segments.length === 0 || segments.some((s) => !SAFE_SLUG.test(s))) {
@@ -145,8 +145,6 @@ export async function deleteDocument(
     throw error;
   }
 }
-
-
 
 /** Updates an existing document at the specified slug path.
  * The slug may include forward-slash-separated path segments (e.g., "category/my-doc").
