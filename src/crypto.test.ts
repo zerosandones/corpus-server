@@ -2,6 +2,7 @@ import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { splitMarkdown, getEncryptionKey, encryptBody, decryptBody } from "./crypto";
 import { writeFile, unlink } from "fs/promises";
 import { join } from "path";
+import { tmpdir } from "os";
 
 const TEST_KEY_HEX = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
 
@@ -76,7 +77,7 @@ describe("crypto", () => {
     });
 
     test("loads key from ENCRYPTION_KEY_FILE when set", async () => {
-      const keyFilePath = join(import.meta.dir, "..", "temp-key-file.txt");
+      const keyFilePath = join(tmpdir(), "corpus-test-key-1.txt");
       await writeFile(keyFilePath, TEST_KEY_HEX);
       const originalEnv = process.env["ENCRYPTION_KEY"];
       delete process.env["ENCRYPTION_KEY"];
@@ -93,7 +94,7 @@ describe("crypto", () => {
     });
 
     test("ENCRYPTION_KEY_FILE takes precedence over ENCRYPTION_KEY", async () => {
-      const keyFilePath = join(import.meta.dir, "..", "temp-key-file-2.txt");
+      const keyFilePath = join(tmpdir(), "corpus-test-key-2.txt");
       await writeFile(keyFilePath, TEST_KEY_HEX);
       process.env["ENCRYPTION_KEY_FILE"] = keyFilePath;
       try {
@@ -118,7 +119,7 @@ describe("crypto", () => {
     });
 
     test("trims surrounding whitespace from the key file content", async () => {
-      const keyFilePath = join(import.meta.dir, "..", "temp-key-file-3.txt");
+      const keyFilePath = join(tmpdir(), "corpus-test-key-3.txt");
       await writeFile(keyFilePath, `\n  ${TEST_KEY_HEX}  \n`);
       const originalEnv = process.env["ENCRYPTION_KEY"];
       delete process.env["ENCRYPTION_KEY"];
