@@ -213,9 +213,9 @@ describe("storage", () => {
       const result = await listFolder("sub", "temp");
       expect(result).not.toBeNull();
       expect(result!.length).toBe(1);
-      expect(result![0].slug).toBe("sub/sub-doc");
-      expect(result![0].title).toBe("Sub Doc");
-      expect(result![0].frontmatter).toBeNull();
+      expect(result![0]?.slug).toBe("sub/sub-doc");
+      expect(result![0]?.title).toBe("Sub Doc");
+      expect(result![0]?.frontmatter).toBeNull();
     });
 
     test("does not include non-markdown files", async () => {

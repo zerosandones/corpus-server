@@ -107,7 +107,7 @@ function parseFrontmatter(content: string): Record<string, string | string[]> | 
   if (!match) return null;
 
   const result: Record<string, string | string[]> = {};
-  for (const line of match[1].split(/\r?\n/)) {
+  for (const line of match.at(1)!.split(/\r?\n/)) {
     const colonIdx = line.indexOf(":");
     if (colonIdx === -1) continue;
     const key = line.slice(0, colonIdx).trim();
@@ -162,7 +162,7 @@ export async function listFolder(
       const fm = parseFrontmatter(content);
       const frontmatterTitle = typeof fm?.["title"] === "string" ? fm["title"] : null;
       const headingMatch = content.match(/^#\s+(.+)$/m);
-      const headingTitle = headingMatch ? headingMatch[1].trim() : null;
+      const headingTitle = headingMatch ? headingMatch.at(1)!.trim() : null;
       results.push({
         slug,
         title: frontmatterTitle ?? headingTitle,

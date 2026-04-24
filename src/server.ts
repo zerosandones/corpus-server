@@ -1,22 +1,5 @@
-import type { BunRequest } from "bun";
+import { formatFolderIndex } from "./response-formatter";
 import { ensureDocsDir, getDocument, listFolder, saveDocument } from "./storage";
-import type { FolderEntry } from "./storage";
-
-function buildFolderIndex(heading: string, entries: FolderEntry[]): string {
-  const lines = [`# ${heading}`, ""];
-  for (const entry of entries) {
-    const baseName = entry.slug.split("/").pop() ?? entry.slug;
-    const label = entry.title ?? baseName;
-    lines.push(`- [${label}](/${entry.slug})`);
-    if (entry.frontmatter) {
-      for (const [key, value] of Object.entries(entry.frontmatter)) {
-        const display = Array.isArray(value) ? value.join(", ") : value;
-        lines.push(`  - ${key}: ${display}`);
-      }
-    }
-  }
-  return lines.join("\n");
-}
 
 console.log("Starting server...");
 
@@ -37,7 +20,11 @@ const server = Bun.serve({
     const pathMatch = pathname.match(/^\/(.+)$/);
 
     if (req.method === "POST" && pathMatch) {
-      const slug = pathMatch[1];
+      const slug =  pathMatch.at(1);
+      if (!slug) {
+        console.log("Invalid slug in POST request");
+        return new Response("Bad Request", { status: 400 });
+      }
       const content = await req.text();
       const result = await saveDocument(slug, content);
       if (result === "created") {
@@ -59,7 +46,7 @@ const server = Bun.serve({
       if (entries === null || entries.length === 0) {
         return new Response(null, { status: 204 });
       }
-      return new Response(buildFolderIndex("Index", entries), {
+      return new Response(formatFolderIndex("Index", entries), {
         status: 200,
         headers: { "Content-Type": "text/markdown; charset=utf-8" },
       });
@@ -87,7 +74,7 @@ const server = Bun.serve({
           return new Response(null, { status: 204 });
         }
         console.log(`Serving folder index for slug: ${slug}`);
-        return new Response(buildFolderIndex(slug, folderEntries), {
+        return new Response(formatFolderIndex(slug, folderEntries), {
           status: 200,
           headers: { "Content-Type": "text/markdown; charset=utf-8" },
         });
