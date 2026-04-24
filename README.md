@@ -57,6 +57,9 @@ metadata:
   name: corpus-encryption-key
 stringData:
   key: "<your-64-char-hex-key>"
+```
+
+> **Note:** Do not commit the key value to version control. Create the secret from an external secret store or via CLI (`kubectl create secret generic corpus-encryption-key --from-literal=key=$(openssl rand -hex 32)`) rather than embedding it in manifests.
 ---
 # In your Pod/Deployment spec:
 env:
