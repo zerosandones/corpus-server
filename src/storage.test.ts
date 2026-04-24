@@ -124,9 +124,9 @@ describe("storage", () => {
       const testContent = "# New Document";
       const result = await saveDocument(testSlug, testContent, "temp");
       expect(result).toBe("created");
-      // Verify round-trip through decryption
+      // Verify encryption/decryption round-trip works correctly
       expect(await getDocument(testSlug, "temp")).toBe(testContent);
-      // Verify the file on disk does NOT contain the plaintext body
+      // Confirm the body is actually encrypted on disk (security compliance)
       const filePath = join(testDocsDir, `${testSlug}.md`);
       expect(await Bun.file(filePath).text()).not.toBe(testContent);
     });
@@ -144,7 +144,7 @@ describe("storage", () => {
       const testContent = "# Sub Document";
       const result = await saveDocument(testSlug, testContent, "temp");
       expect(result).toBe("created");
-      // Verify round-trip via direct decrypt (getDocument does not support slashed slugs)
+      // Verify round-trip via direct decrypt; getDocument only accepts simple slugs without path separators
       const filePath = join(testDocsDir, "category", "sub-doc.md");
       const raw = await Bun.file(filePath).text();
       const { frontmatter, body } = splitMarkdown(raw);
@@ -359,7 +359,7 @@ describe("storage", () => {
       await saveDocument(testSlug, "# Original", "temp");
       const result = await updateDocument(testSlug, "# Updated", "temp");
       expect(result).toBe("updated");
-      // Verify round-trip via direct decrypt (getDocument does not support slashed slugs)
+      // Verify round-trip via direct decrypt; getDocument only accepts simple slugs without path separators
       const filePath = join(testDocsDir, "nested", "update-doc.md");
       const raw = await Bun.file(filePath).text();
       const { frontmatter, body } = splitMarkdown(raw);

@@ -33,7 +33,7 @@ describe("document serving", () => {
   const testContent = "# Test Document\n\nThis is a test.";
 
   test("returns a document with text/markdown content-type", async () => {
-    // Create the document via POST so the body is encrypted on disk
+    // Create the document via POST instead of direct file write so the body is properly encrypted on disk
     await fetch(new URL(`/${testSlug}`, server.url), {
       method: "POST",
       body: testContent,
