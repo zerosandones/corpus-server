@@ -15,7 +15,7 @@ import {
   saveDocument,
   updateDocument,
 } from "./storage";
-import { decryptBody, getEncryptionKey, splitMarkdown } from "./crypto";
+import { decryptBody, splitMarkdown } from "./crypto";
 
 // Must be set before any test that calls saveDocument / getDocument / updateDocument
 process.env["ENCRYPTION_KEY"] = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
@@ -148,8 +148,7 @@ describe("storage", () => {
       const filePath = join(testDocsDir, "category", "sub-doc.md");
       const raw = await Bun.file(filePath).text();
       const { frontmatter, body } = splitMarkdown(raw);
-      const key = await getEncryptionKey();
-      expect(frontmatter + (await decryptBody(body, key))).toBe(testContent);
+      expect(frontmatter + (await decryptBody(body))).toBe(testContent);
     });
 
     test("returns 'created' for deeply nested path", async () => {
@@ -363,8 +362,7 @@ describe("storage", () => {
       const filePath = join(testDocsDir, "nested", "update-doc.md");
       const raw = await Bun.file(filePath).text();
       const { frontmatter, body } = splitMarkdown(raw);
-      const key = await getEncryptionKey();
-      expect(frontmatter + (await decryptBody(body, key))).toBe("# Updated");
+      expect(frontmatter + (await decryptBody(body))).toBe("# Updated");
     });
   });
 

@@ -1,6 +1,6 @@
 import { mkdir, readdir, unlink } from "fs/promises";
 import { join } from "path";
-import { decryptBody, encryptBody, getEncryptionKey, splitMarkdown } from "./crypto";
+import { decryptBody, encryptBody, splitMarkdown } from "./crypto";
 
 const SAFE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/; //validates URL-safe document slugs in kebab-case format
 
@@ -57,9 +57,8 @@ export async function getDocument(
     return null;
   }
   const raw = await file.text();
-  const key = await getEncryptionKey();
   const { frontmatter, body } = splitMarkdown(raw);
-  const decrypted = await decryptBody(body, key);
+  const decrypted = await decryptBody(body);
   return frontmatter + decrypted;
 }
 
@@ -104,9 +103,8 @@ export async function saveDocument(
   if (segments.length > 1) {
     await mkdir(fileDir, { recursive: true });
   }
-  const key = await getEncryptionKey();
   const { frontmatter, body } = splitMarkdown(content);
-  const encrypted = await encryptBody(body, key);
+  const encrypted = await encryptBody(body);
   await Bun.write(filePath, frontmatter + encrypted);
   return "created";
 }
@@ -272,9 +270,8 @@ export async function updateDocument(
     return "not_found";
   }
 
-  const key = await getEncryptionKey();
   const { frontmatter, body } = splitMarkdown(content);
-  const encrypted = await encryptBody(body, key);
+  const encrypted = await encryptBody(body);
   await Bun.write(filePath, frontmatter + encrypted);
   return "updated";
 }
