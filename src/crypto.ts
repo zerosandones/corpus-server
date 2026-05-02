@@ -32,12 +32,13 @@ export function splitMarkdown(content: string): { frontmatter: string; body: str
  *    environment variable.  Convenient for local development and CI, but less
  *    secure in production because environment variables can be read by any process
  *    running as the same user and are surfaced by container inspection tools.
+ *    A warning is emitted to stderr when this fallback is used.
  *
  * The resolved value must be a 64-character hex string (32 bytes, AES-256).
  *
  * @throws If neither variable is set, or if the resolved value is malformed.
  */
-export async function getEncryptionKey(): Promise<CryptoKey> {
+async function getEncryptionKey(): Promise<CryptoKey> {
   let hex: string | undefined;
 
   const keyFile = process.env["ENCRYPTION_KEY_FILE"];
@@ -49,6 +50,12 @@ export async function getEncryptionKey(): Promise<CryptoKey> {
     hex = (await file.text()).trim();
   } else {
     hex = process.env["ENCRYPTION_KEY"];
+    if (hex) {
+      console.warn(
+        "[corpus-server] WARNING: Encryption key is loaded from the ENCRYPTION_KEY environment variable. " +
+          "This is not recommended for production — set ENCRYPTION_KEY_FILE to a Docker or Kubernetes secret path instead.",
+      );
+    }
   }
 
   if (!hex) {
@@ -74,11 +81,15 @@ export async function getEncryptionKey(): Promise<CryptoKey> {
  * `CORPUSENC1:<base64>` token that encodes a random 12-byte IV prepended to
  * the ciphertext (which includes the GCM authentication tag).
  *
+ * The encryption key is loaded automatically from `ENCRYPTION_KEY_FILE` or
+ * `ENCRYPTION_KEY` (see `getEncryptionKey` for precedence rules).
+ *
  * @param body The plaintext document body to encrypt.
- * @param key  An AES-256-GCM CryptoKey with the `encrypt` usage.
  * @returns The encrypted token string.
+ * @throws If the encryption key is not configured or is malformed.
  */
-export async function encryptBody(body: string, key: CryptoKey): Promise<string> {
+export async function encryptBody(body: string): Promise<string> {
+  const key = await getEncryptionKey();
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
@@ -95,15 +106,19 @@ export async function encryptBody(body: string, key: CryptoKey): Promise<string>
  * Decrypts a `CORPUSENC1:<base64>` token produced by `encryptBody` and
  * returns the original plaintext body string.
  *
+ * The encryption key is loaded automatically from `ENCRYPTION_KEY_FILE` or
+ * `ENCRYPTION_KEY` (see `getEncryptionKey` for precedence rules).
+ *
  * @param encrypted The encrypted token string.
- * @param key       An AES-256-GCM CryptoKey with the `decrypt` usage.
- * @throws If the token does not carry the expected magic prefix, or if AES-GCM
- *         authentication fails (wrong key or tampered ciphertext).
+ * @throws If the token does not carry the expected magic prefix, if the
+ *         encryption key is not configured, or if AES-GCM authentication
+ *         fails (wrong key or tampered ciphertext).
  */
-export async function decryptBody(encrypted: string, key: CryptoKey): Promise<string> {
+export async function decryptBody(encrypted: string): Promise<string> {
   if (!encrypted.startsWith(MAGIC_PREFIX)) {
     throw new Error("Content is not in the corpus-server encrypted format");
   }
+  const key = await getEncryptionKey();
   const combined = Buffer.from(encrypted.slice(MAGIC_PREFIX.length), "base64");
   const iv = combined.slice(0, 12);
   const ciphertext = combined.slice(12);
