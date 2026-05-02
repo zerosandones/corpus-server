@@ -27,7 +27,7 @@ const server = Bun.serve({
         return new Response("Unauthorized", { status: 401 });
       }
       if (!principal.scopes.includes("write")) {
-        console.log(`Forbidden PUT (missing write scope) for principal: ${principal.id}`);
+        console.log(`Forbidden PUT: principal missing write scope`);
         return new Response("Forbidden", { status: 403 });
       }
       const slug = pathMatch[1] as string;
@@ -53,7 +53,7 @@ const server = Bun.serve({
         return new Response("Unauthorized", { status: 401 });
       }
       if (!principal.scopes.includes("write")) {
-        console.log(`Forbidden POST (missing write scope) for principal: ${principal.id}`);
+        console.log(`Forbidden POST: principal missing write scope`);
         return new Response("Forbidden", { status: 403 });
       }
       const slug = pathMatch[1] as string;
