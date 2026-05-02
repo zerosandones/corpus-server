@@ -1,9 +1,6 @@
 /** Magic prefix written before every encrypted body, enabling format detection. */
 const MAGIC_PREFIX = "CORPUSENC1:";
 
-/** Ensures the ENCRYPTION_KEY fallback warning is emitted at most once per process. */
-let _envKeyWarningEmitted = false;
-
 /**
  * Splits a Markdown document into its YAML frontmatter block and the remaining body.
  * The frontmatter string includes the trailing newline after the closing `---` delimiter
@@ -54,13 +51,10 @@ async function getEncryptionKey(): Promise<CryptoKey> {
   } else {
     hex = process.env["ENCRYPTION_KEY"];
     if (hex) {
-      if (!_envKeyWarningEmitted) {
-        _envKeyWarningEmitted = true;
-        console.warn(
-          "[corpus-server] WARNING: Encryption key is loaded from the ENCRYPTION_KEY environment variable. " +
-            "This is not recommended for production — set ENCRYPTION_KEY_FILE to a Docker or Kubernetes secret path instead.",
-        );
-      }
+      console.warn(
+        "[corpus-server] WARNING: Encryption key is loaded from the ENCRYPTION_KEY environment variable. " +
+          "This is not recommended for production — set ENCRYPTION_KEY_FILE to a Docker or Kubernetes secret path instead.",
+      );
     }
   }
 
