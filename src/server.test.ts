@@ -1,8 +1,32 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { access, rm, unlink } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
 import server from "./server";
+
+// ---------------------------------------------------------------------------
+// Test API key — computed once per run so the suite stays self-contained.
+// API_KEYS is read by authenticate() on every request, so setting it here
+// in beforeAll (after the server module has already loaded) is sufficient.
+// ---------------------------------------------------------------------------
+const TEST_RAW_KEY = "server-test-api-key-abc123";
+let authHeader: string;
+
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const buffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+beforeAll(async () => {
+  const hash = await sha256Hex(TEST_RAW_KEY);
+  process.env["API_KEYS"] = JSON.stringify([
+    { id: "test-agent", keyHash: hash, scopes: ["write"] },
+  ]);
+  authHeader = `Bearer ${TEST_RAW_KEY}`;
+});
 
 const documentsDir = join(import.meta.dir, "..", "documents");
 
@@ -55,9 +79,33 @@ describe("document uploading", () => {
   const uploadFilePath = join(documentsDir, `${uploadSlug}.md`);
   const uploadContent = "# Upload Test\n\nUploaded via POST.";
 
+  test("returns 401 when Authorization header is absent", async () => {
+    const response = await fetch(new URL(`/${uploadSlug}`, server.url), {
+      method: "POST",
+      body: uploadContent,
+    });
+    expect(response.status).toBe(401);
+  });
+
+  test("returns 403 when principal has no write scope", async () => {
+    const hash = await sha256Hex("read-only-key");
+    const savedKeys = process.env["API_KEYS"];
+    process.env["API_KEYS"] = JSON.stringify([
+      { id: "read-only-agent", keyHash: hash, scopes: [] },
+    ]);
+    const response = await fetch(new URL(`/${uploadSlug}`, server.url), {
+      method: "POST",
+      headers: { Authorization: "Bearer read-only-key" },
+      body: uploadContent,
+    });
+    expect(response.status).toBe(403);
+    process.env["API_KEYS"] = savedKeys;
+  });
+
   test("returns 200 when a new document is saved via POST", async () => {
     const response = await fetch(new URL(`/${uploadSlug}`, server.url), {
       method: "POST",
+      headers: { Authorization: authHeader },
       body: uploadContent,
     });
     expect(response.status).toBe(200);
@@ -68,6 +116,7 @@ describe("document uploading", () => {
     await Bun.write(uploadFilePath, uploadContent);
     const response = await fetch(new URL(`/${uploadSlug}`, server.url), {
       method: "POST",
+      headers: { Authorization: authHeader },
       body: "# Different Content",
     });
     expect(response.status).toBe(409);
@@ -79,6 +128,7 @@ describe("document uploading", () => {
     const nestedFilePath = join(documentsDir, "category", "nested-upload.md");
     const response = await fetch(new URL(`/${nestedSlug}`, server.url), {
       method: "POST",
+      headers: { Authorization: authHeader },
       body: "# Nested Upload",
     });
     expect(response.status).toBe(200);
@@ -89,6 +139,7 @@ describe("document uploading", () => {
   test("returns 400 when POST slug is invalid", async () => {
     const response = await fetch(new URL("/Invalid-Slug", server.url), {
       method: "POST",
+      headers: { Authorization: authHeader },
       body: "# Content",
     });
     expect(response.status).toBe(400);
@@ -101,10 +152,34 @@ describe("document updating", () => {
   const originalContent = "# Original Content";
   const updatedContent = "# Updated Content";
 
+  test("returns 401 when Authorization header is absent", async () => {
+    const response = await fetch(new URL(`/${updateSlug}`, server.url), {
+      method: "PUT",
+      body: updatedContent,
+    });
+    expect(response.status).toBe(401);
+  });
+
+  test("returns 403 when principal has no write scope", async () => {
+    const hash = await sha256Hex("read-only-key-2");
+    const savedKeys = process.env["API_KEYS"];
+    process.env["API_KEYS"] = JSON.stringify([
+      { id: "read-only-agent-2", keyHash: hash, scopes: [] },
+    ]);
+    const response = await fetch(new URL(`/${updateSlug}`, server.url), {
+      method: "PUT",
+      headers: { Authorization: "Bearer read-only-key-2" },
+      body: updatedContent,
+    });
+    expect(response.status).toBe(403);
+    process.env["API_KEYS"] = savedKeys;
+  });
+
   test("returns 200 when an existing document is updated via PUT", async () => {
     await Bun.write(updateFilePath, originalContent);
     const response = await fetch(new URL(`/${updateSlug}`, server.url), {
       method: "PUT",
+      headers: { Authorization: authHeader },
       body: updatedContent,
     });
     expect(response.status).toBe(200);
@@ -115,6 +190,7 @@ describe("document updating", () => {
   test("returns 404 when document does not exist via PUT", async () => {
     const response = await fetch(new URL("/no-such-document", server.url), {
       method: "PUT",
+      headers: { Authorization: authHeader },
       body: updatedContent,
     });
     expect(response.status).toBe(404);
@@ -123,6 +199,7 @@ describe("document updating", () => {
   test("returns 400 when PUT slug is invalid", async () => {
     const response = await fetch(new URL("/Invalid-Slug", server.url), {
       method: "PUT",
+      headers: { Authorization: authHeader },
       body: "# Content",
     });
     expect(response.status).toBe(400);

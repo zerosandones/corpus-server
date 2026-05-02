@@ -6,6 +6,38 @@ Create markdown knowledge libraries for you, your team, your organisation, your 
 
 Knowledge is more important than, Corpus server is the web server for the Web 1+ era. Dealing with markdown documents we allow for easier display and understanding of these structured documents by people and machine.
 
+## API Authentication
+
+Write operations (POST and PUT) require a valid API key supplied as a Bearer token:
+
+```
+Authorization: Bearer <your-raw-key>
+```
+
+API keys are configured via the `API_KEYS` environment variable. Its value must be a JSON array of key records:
+
+```json
+[
+  {
+    "id": "my-agent",
+    "keyHash": "<sha256-hex-of-raw-key>",
+    "scopes": ["write"]
+  }
+]
+```
+
+* **`id`** — a human-readable label for the caller (logged on each request).
+* **`keyHash`** — the SHA-256 hex digest of the raw bearer token. Never store the raw key; only record the hash.
+* **`scopes`** — list of permissions granted. Use `"write"` to allow POST and PUT.
+
+To generate a key hash (Unix):
+
+```sh
+echo -n "my-secret-key" | sha256sum
+```
+
+Read access (GET) is public and does not require authentication.
+
 ## Why Markdown
 
 In knowledge bases markdown has several advantages over other markup languages like html

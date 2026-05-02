@@ -1,4 +1,5 @@
 import type { BunRequest } from "bun";
+import { authenticate } from "./auth";
 import { ensureDocsDir, getDocument, saveDocument, updateDocument } from "./storage";
 
 console.log("Starting server...");
@@ -20,6 +21,15 @@ const server = Bun.serve({
     const pathMatch = pathname.match(/^\/(.+)$/);
 
     if (req.method === "PUT" && pathMatch) {
+      const principal = await authenticate(req);
+      if (!principal) {
+        console.log(`Unauthenticated PUT: ${req.url}`);
+        return new Response("Unauthorized", { status: 401 });
+      }
+      if (!principal.scopes.includes("write")) {
+        console.log(`Forbidden PUT (missing write scope) for principal: ${principal.id}`);
+        return new Response("Forbidden", { status: 403 });
+      }
       const slug = pathMatch[1] as string;
       const content = await req.text();
       const result = await updateDocument(slug, content);
@@ -37,6 +47,15 @@ const server = Bun.serve({
     }
 
     if (req.method === "POST" && pathMatch) {
+      const principal = await authenticate(req);
+      if (!principal) {
+        console.log(`Unauthenticated POST: ${req.url}`);
+        return new Response("Unauthorized", { status: 401 });
+      }
+      if (!principal.scopes.includes("write")) {
+        console.log(`Forbidden POST (missing write scope) for principal: ${principal.id}`);
+        return new Response("Forbidden", { status: 403 });
+      }
       const slug = pathMatch[1] as string;
       const content = await req.text();
       const result = await saveDocument(slug, content);
