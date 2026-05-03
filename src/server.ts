@@ -1,17 +1,22 @@
 import {
   ensureDocsDir,
   getDocument,
+  getDocumentSecurity,
   saveDocument,
   updateDocument,
   deleteDocument,
   listFolder,
 } from "./storage";
 import { formatFolderIndex } from "./response-formatter";
+import { createUser, verifyUser, ensureUsersDb } from "./users";
+import { signToken } from "./jwt";
+import { requireAuth, isProtectedDocument, type AuthError } from "./auth";
 
 console.log("Starting server...");
 
 console.log("Checking data directory...");
 await ensureDocsDir();
+await ensureUsersDb();
 console.log("Data directory is ready.");
 
 const server = Bun.serve({
@@ -22,10 +27,72 @@ const server = Bun.serve({
     const url = new URL(req.url);
     const pathname = url.pathname;
 
+    // ── Auth helper: map an AuthError to a Response ──────────────────────────
+    function authErrorResponse(err: AuthError): Response {
+      if (err === "missing") {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      return new Response("Forbidden", { status: 403 });
+    }
+
+    // ── POST /auth/register ───────────────────────────────────────────────────
+    if (req.method === "POST" && pathname === "/auth/register") {
+      if (process.env["ALLOW_REGISTRATION"] !== "true") {
+        return new Response("Not found", { status: 404 });
+      }
+      let body: { username?: unknown; password?: unknown };
+      try {
+        body = (await req.json()) as { username?: unknown; password?: unknown };
+      } catch {
+        return new Response("Bad Request", { status: 400 });
+      }
+      const { username, password } = body;
+      if (typeof username !== "string" || !username || typeof password !== "string" || !password) {
+        return new Response("Bad Request", { status: 400 });
+      }
+      const result = await createUser(username, password);
+      if (result === "created") {
+        console.log(`User registered: ${username}`);
+        return new Response("Created", { status: 201 });
+      }
+      console.log(`User registration conflict: ${username}`);
+      return new Response("Conflict", { status: 409 });
+    }
+
+    // ── POST /auth/login ──────────────────────────────────────────────────────
+    if (req.method === "POST" && pathname === "/auth/login") {
+      let body: { username?: unknown; password?: unknown };
+      try {
+        body = (await req.json()) as { username?: unknown; password?: unknown };
+      } catch {
+        return new Response("Bad Request", { status: 400 });
+      }
+      const { username, password } = body;
+      if (typeof username !== "string" || !username || typeof password !== "string" || !password) {
+        return new Response("Bad Request", { status: 400 });
+      }
+      const valid = await verifyUser(username, password);
+      if (!valid) {
+        console.log(`Login failed for user: ${username}`);
+        return new Response("Unauthorized", { status: 401 });
+      }
+      const token = await signToken(username);
+      console.log(`Login successful for user: ${username}`);
+      return new Response(JSON.stringify({ token }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     // Match any non-root path for routing
     const pathMatch = pathname.match(/^\/(.+)$/);
 
     if (req.method === "PUT" && pathMatch) {
+      try {
+        await requireAuth(req);
+      } catch (err) {
+        return authErrorResponse(err as AuthError);
+      }
       const slug = pathMatch[1] as string;
       const content = await req.text();
       const result = await updateDocument(slug, content);
@@ -43,7 +110,12 @@ const server = Bun.serve({
     }
 
     if (req.method === "POST" && pathMatch) {
-      const slug =  pathMatch.at(1);
+      try {
+        await requireAuth(req);
+      } catch (err) {
+        return authErrorResponse(err as AuthError);
+      }
+      const slug = pathMatch.at(1);
       if (!slug) {
         console.log("Invalid slug in POST request");
         return new Response("Bad Request", { status: 400 });
@@ -64,6 +136,11 @@ const server = Bun.serve({
     }
 
     if (req.method === "DELETE" && pathMatch) {
+      try {
+        await requireAuth(req);
+      } catch (err) {
+        return authErrorResponse(err as AuthError);
+      }
       const slug = pathMatch.at(1);
       if (slug === undefined) {
         return new Response("Not found", { status: 404 });
@@ -87,7 +164,7 @@ const server = Bun.serve({
         return new Response("Internal Server Error", { status: 500 });
       }
     }
-    
+
     if (req.method === "GET" && pathname === "/") {
       console.log("Listing root folder index");
       const entries = await listFolder();
@@ -104,6 +181,17 @@ const server = Bun.serve({
     const match = pathname.match(/^\/([^/]+)$/);
     if (match) {
       const slug = match[1] as string;
+
+      // Check document security before serving
+      const security = await getDocumentSecurity(slug);
+      if (isProtectedDocument(security)) {
+        try {
+          await requireAuth(req);
+        } catch (err) {
+          return authErrorResponse(err as AuthError);
+        }
+      }
+
       const content = await getDocument(slug);
       if (content !== null) {
         console.log(`Serving document for slug: ${slug}`);
