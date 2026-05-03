@@ -19,6 +19,49 @@ await ensureDocsDir();
 await ensureUsersDb();
 console.log("Data directory is ready.");
 
+/** Maps an AuthError to the appropriate HTTP Response. */
+function authErrorResponse(err: AuthError): Response {
+  if (err === "missing") {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  return new Response("Forbidden", { status: 403 });
+}
+
+/**
+ * Parses and validates a `{ username, password }` JSON body from a request.
+ * Returns the credentials on success or a 400 Response on invalid input.
+ */
+async function parseCredentials(
+  req: Request,
+): Promise<{ username: string; password: string } | Response> {
+  let body: { username?: unknown; password?: unknown };
+  try {
+    body = (await req.json()) as { username?: unknown; password?: unknown };
+  } catch {
+    return new Response("Bad Request", { status: 400 });
+  }
+  const { username, password } = body;
+  if (
+    typeof username !== "string" ||
+    !username ||
+    typeof password !== "string" ||
+    !password
+  ) {
+    return new Response("Bad Request", { status: 400 });
+  }
+  return { username, password };
+}
+
+/** Enforces auth on a request, returning a Response on failure or null on success. */
+async function enforceAuth(req: Request): Promise<Response | null> {
+  try {
+    await requireAuth(req);
+    return null;
+  } catch (err) {
+    return authErrorResponse(err as AuthError);
+  }
+}
+
 const server = Bun.serve({
   port: Number(process.env.PORT) || 8080,
 
@@ -27,57 +70,33 @@ const server = Bun.serve({
     const url = new URL(req.url);
     const pathname = url.pathname;
 
-    // ── Auth helper: map an AuthError to a Response ──────────────────────────
-    function authErrorResponse(err: AuthError): Response {
-      if (err === "missing") {
-        return new Response("Unauthorized", { status: 401 });
-      }
-      return new Response("Forbidden", { status: 403 });
-    }
-
     // ── POST /auth/register ───────────────────────────────────────────────────
     if (req.method === "POST" && pathname === "/auth/register") {
       if (process.env["ALLOW_REGISTRATION"] !== "true") {
         return new Response("Not found", { status: 404 });
       }
-      let body: { username?: unknown; password?: unknown };
-      try {
-        body = (await req.json()) as { username?: unknown; password?: unknown };
-      } catch {
-        return new Response("Bad Request", { status: 400 });
-      }
-      const { username, password } = body;
-      if (typeof username !== "string" || !username || typeof password !== "string" || !password) {
-        return new Response("Bad Request", { status: 400 });
-      }
-      const result = await createUser(username, password);
+      const creds = await parseCredentials(req);
+      if (creds instanceof Response) return creds;
+      const result = await createUser(creds.username, creds.password);
       if (result === "created") {
-        console.log(`User registered: ${username}`);
+        console.log(`User registered: ${creds.username}`);
         return new Response("Created", { status: 201 });
       }
-      console.log(`User registration conflict: ${username}`);
+      console.log(`User registration conflict: ${creds.username}`);
       return new Response("Conflict", { status: 409 });
     }
 
     // ── POST /auth/login ──────────────────────────────────────────────────────
     if (req.method === "POST" && pathname === "/auth/login") {
-      let body: { username?: unknown; password?: unknown };
-      try {
-        body = (await req.json()) as { username?: unknown; password?: unknown };
-      } catch {
-        return new Response("Bad Request", { status: 400 });
-      }
-      const { username, password } = body;
-      if (typeof username !== "string" || !username || typeof password !== "string" || !password) {
-        return new Response("Bad Request", { status: 400 });
-      }
-      const valid = await verifyUser(username, password);
+      const creds = await parseCredentials(req);
+      if (creds instanceof Response) return creds;
+      const valid = await verifyUser(creds.username, creds.password);
       if (!valid) {
-        console.log(`Login failed for user: ${username}`);
+        console.log(`Login failed for user: ${creds.username}`);
         return new Response("Unauthorized", { status: 401 });
       }
-      const token = await signToken(username);
-      console.log(`Login successful for user: ${username}`);
+      const token = await signToken(creds.username);
+      console.log(`Login successful for user: ${creds.username}`);
       return new Response(JSON.stringify({ token }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -88,11 +107,8 @@ const server = Bun.serve({
     const pathMatch = pathname.match(/^\/(.+)$/);
 
     if (req.method === "PUT" && pathMatch) {
-      try {
-        await requireAuth(req);
-      } catch (err) {
-        return authErrorResponse(err as AuthError);
-      }
+      const authFailure = await enforceAuth(req);
+      if (authFailure) return authFailure;
       const slug = pathMatch[1] as string;
       const content = await req.text();
       const result = await updateDocument(slug, content);
@@ -110,11 +126,8 @@ const server = Bun.serve({
     }
 
     if (req.method === "POST" && pathMatch) {
-      try {
-        await requireAuth(req);
-      } catch (err) {
-        return authErrorResponse(err as AuthError);
-      }
+      const authFailure = await enforceAuth(req);
+      if (authFailure) return authFailure;
       const slug = pathMatch.at(1);
       if (!slug) {
         console.log("Invalid slug in POST request");
@@ -136,11 +149,8 @@ const server = Bun.serve({
     }
 
     if (req.method === "DELETE" && pathMatch) {
-      try {
-        await requireAuth(req);
-      } catch (err) {
-        return authErrorResponse(err as AuthError);
-      }
+      const authFailure = await enforceAuth(req);
+      if (authFailure) return authFailure;
       const slug = pathMatch.at(1);
       if (slug === undefined) {
         return new Response("Not found", { status: 404 });
@@ -185,11 +195,8 @@ const server = Bun.serve({
       // Check document security before serving
       const security = await getDocumentSecurity(slug);
       if (isProtectedDocument(security)) {
-        try {
-          await requireAuth(req);
-        } catch (err) {
-          return authErrorResponse(err as AuthError);
-        }
+        const authFailure = await enforceAuth(req);
+        if (authFailure) return authFailure;
       }
 
       const content = await getDocument(slug);
