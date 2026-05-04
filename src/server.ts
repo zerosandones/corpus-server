@@ -1,18 +1,91 @@
 import {
   ensureDocsDir,
   getDocument,
+  getDocumentSecurity,
+  isProtectedDocument,
   saveDocument,
   updateDocument,
   deleteDocument,
   listFolder,
+  type FolderEntry,
+  type DocumentSecurity,
 } from "./storage";
 import { formatFolderIndex } from "./response-formatter";
+import { createUser, verifyUser, ensureUsersDb } from "./users";
+import { signToken } from "./jwt";
+import { requireAuth, type AuthError } from "./auth";
 
 console.log("Starting server...");
 
 console.log("Checking data directory...");
 await ensureDocsDir();
 console.log("Data directory is ready.");
+
+console.log("Initialising user database...");
+await ensureUsersDb();
+console.log("User database ready.");
+
+/** Maps an AuthError to the appropriate HTTP Response. */
+function authErrorResponse(err: AuthError): Response {
+  if (err === "missing") {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  return new Response("Forbidden", { status: 403 });
+}
+
+/**
+ * Parses and validates a `{ username, password }` JSON body from a request.
+ * Returns the credentials on success or a 400 Response on invalid input.
+ */
+async function parseCredentials(
+  req: Request,
+): Promise<{ username: string; password: string } | Response> {
+  let body: { username?: unknown; password?: unknown };
+  try {
+    body = (await req.json()) as { username?: unknown; password?: unknown };
+  } catch {
+    return new Response("Bad Request", { status: 400 });
+  }
+  const { username, password } = body;
+  if (
+    typeof username !== "string" ||
+    !username ||
+    typeof password !== "string" ||
+    !password
+  ) {
+    return new Response("Bad Request", { status: 400 });
+  }
+  return { username, password };
+}
+
+/** Enforces auth on a request, returning a Response on failure or null on success. */
+async function enforceAuth(req: Request): Promise<Response | null> {
+  const result = await requireAuth(req);
+  if (typeof result === "string") {
+    return authErrorResponse(result);
+  }
+  return null;
+}
+
+/**
+ * Filters a list of folder entries, removing internal/confidential documents
+ * when the request is unauthenticated. Authenticated requests see all entries.
+ */
+async function filterVisibleEntries(
+  req: Request,
+  entries: FolderEntry[],
+): Promise<FolderEntry[]> {
+  const authResult = await requireAuth(req);
+  const isAuthenticated = typeof authResult !== "string";
+  if (isAuthenticated) return entries;
+  return entries.filter((e) => {
+    const sec = e.frontmatter?.["security"];
+    const security = (sec === "public" || sec === "internal" || sec === "confidential")
+      ? (sec as DocumentSecurity)
+      : null;
+    return !isProtectedDocument(security);
+  });
+}
 
 const server = Bun.serve({
   port: Number(process.env.PORT) || 8080,
@@ -22,10 +95,45 @@ const server = Bun.serve({
     const url = new URL(req.url);
     const pathname = url.pathname;
 
+    // ── POST /auth/register ───────────────────────────────────────────────────
+    if (req.method === "POST" && pathname === "/auth/register") {
+      if (process.env["ALLOW_REGISTRATION"] !== "true") {
+        return new Response("Not found", { status: 404 });
+      }
+      const creds = await parseCredentials(req);
+      if (creds instanceof Response) return creds;
+      const result = await createUser(creds.username, creds.password);
+      if (result === "created") {
+        console.log(`User registered: ${creds.username}`);
+        return new Response("Created", { status: 201 });
+      }
+      console.log(`User registration conflict: ${creds.username}`);
+      return new Response("Conflict", { status: 409 });
+    }
+
+    // ── POST /auth/login ──────────────────────────────────────────────────────
+    if (req.method === "POST" && pathname === "/auth/login") {
+      const creds = await parseCredentials(req);
+      if (creds instanceof Response) return creds;
+      const valid = await verifyUser(creds.username, creds.password);
+      if (!valid) {
+        console.log(`Login failed for user: ${creds.username}`);
+        return new Response("Unauthorized", { status: 401 });
+      }
+      const token = await signToken(creds.username);
+      console.log(`Login successful for user: ${creds.username}`);
+      return new Response(JSON.stringify({ token }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     // Match any non-root path for routing
     const pathMatch = pathname.match(/^\/(.+)$/);
 
     if (req.method === "PUT" && pathMatch) {
+      const authFailure = await enforceAuth(req);
+      if (authFailure) return authFailure;
       const slug = pathMatch[1] as string;
       const content = await req.text();
       const result = await updateDocument(slug, content);
@@ -43,7 +151,9 @@ const server = Bun.serve({
     }
 
     if (req.method === "POST" && pathMatch) {
-      const slug =  pathMatch.at(1);
+      const authFailure = await enforceAuth(req);
+      if (authFailure) return authFailure;
+      const slug = pathMatch.at(1);
       if (!slug) {
         console.log("Invalid slug in POST request");
         return new Response("Bad Request", { status: 400 });
@@ -64,6 +174,8 @@ const server = Bun.serve({
     }
 
     if (req.method === "DELETE" && pathMatch) {
+      const authFailure = await enforceAuth(req);
+      if (authFailure) return authFailure;
       const slug = pathMatch.at(1);
       if (slug === undefined) {
         return new Response("Not found", { status: 404 });
@@ -87,14 +199,18 @@ const server = Bun.serve({
         return new Response("Internal Server Error", { status: 500 });
       }
     }
-    
+
     if (req.method === "GET" && pathname === "/") {
       console.log("Listing root folder index");
       const entries = await listFolder();
-      if (entries === null || entries.length === 0) {
+      if (entries === null) {
         return new Response(null, { status: 204 });
       }
-      return new Response(formatFolderIndex("Index", entries), {
+      const visibleEntries = await filterVisibleEntries(req, entries);
+      if (visibleEntries.length === 0) {
+        return new Response(null, { status: 204 });
+      }
+      return new Response(formatFolderIndex("Index", visibleEntries), {
         status: 200,
         headers: { "Content-Type": "text/markdown; charset=utf-8" },
       });
@@ -104,6 +220,14 @@ const server = Bun.serve({
     const match = pathname.match(/^\/([^/]+)$/);
     if (match) {
       const slug = match[1] as string;
+
+      // Check document security before serving
+      const security = await getDocumentSecurity(slug);
+      if (isProtectedDocument(security)) {
+        const authFailure = await enforceAuth(req);
+        if (authFailure) return authFailure;
+      }
+
       const content = await getDocument(slug);
       if (content !== null) {
         console.log(`Serving document for slug: ${slug}`);
@@ -117,12 +241,13 @@ const server = Bun.serve({
 
       const folderEntries = await listFolder(slug);
       if (folderEntries !== null) {
-        if (folderEntries.length === 0) {
+        const visibleEntries = await filterVisibleEntries(req, folderEntries);
+        if (visibleEntries.length === 0) {
           console.log(`Empty folder for slug: ${slug}`);
           return new Response(null, { status: 204 });
         }
         console.log(`Serving folder index for slug: ${slug}`);
-        return new Response(formatFolderIndex(slug, folderEntries), {
+        return new Response(formatFolderIndex(slug, visibleEntries), {
           status: 200,
           headers: { "Content-Type": "text/markdown; charset=utf-8" },
         });

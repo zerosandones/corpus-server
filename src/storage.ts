@@ -109,6 +109,51 @@ export async function saveDocument(
   return "created";
 }
 
+/** The approved security classification values for a document. */
+export type DocumentSecurity = "public" | "internal" | "confidential";
+
+/**
+ * Returns true when the given security level requires authentication for read access.
+ * Both "internal" and "confidential" documents are protected.
+ * "public" documents and documents with no security level are not protected.
+ *
+ * @param security The document security classification, or null if not set.
+ */
+export function isProtectedDocument(
+  security: DocumentSecurity | null,
+): boolean {
+  return security === "internal" || security === "confidential";
+}
+
+/**
+ * Reads the `security` frontmatter field of a document without decrypting its body.
+ * Returns the classification when present and valid, or null when the slug is
+ * invalid, the file does not exist, or the frontmatter does not contain a
+ * recognised security value.
+ *
+ * @param slug The document slug (e.g. "my-document"). Single segment only.
+ * @param folderName The folder that contains the documents (default: "documents").
+ * @returns The security value, or null.
+ * @example
+ * const sec = await getDocumentSecurity("my-doc"); // "public" | "internal" | "confidential" | null
+ */
+export async function getDocumentSecurity(
+  slug: string,
+  folderName: string = "documents",
+): Promise<DocumentSecurity | null> {
+  if (!SAFE_SLUG.test(slug)) return null;
+  const filePath = join(import.meta.dir, "..", folderName, `${slug}.md`);
+  const file = Bun.file(filePath);
+  if (!(await file.exists())) return null;
+  const raw = await file.text();
+  const fm = parseFrontmatter(raw);
+  const sec = fm?.["security"];
+  if (sec === "public" || sec === "internal" || sec === "confidential") {
+    return sec;
+  }
+  return null;
+}
+
 /** Represents a single document entry returned by a folder listing. */
 export type FolderEntry = {
   /** Path from the documents root, without the .md extension (e.g. "my-doc" or "category/my-doc"). */
