@@ -2,22 +2,28 @@ import {
   ensureDocsDir,
   getDocument,
   getDocumentSecurity,
+  isProtectedDocument,
   saveDocument,
   updateDocument,
   deleteDocument,
   listFolder,
+  type FolderEntry,
+  type DocumentSecurity,
 } from "./storage";
 import { formatFolderIndex } from "./response-formatter";
 import { createUser, verifyUser, ensureUsersDb } from "./users";
 import { signToken } from "./jwt";
-import { requireAuth, isProtectedDocument, type AuthError } from "./auth";
+import { requireAuth, type AuthError } from "./auth";
 
 console.log("Starting server...");
 
 console.log("Checking data directory...");
 await ensureDocsDir();
-await ensureUsersDb();
 console.log("Data directory is ready.");
+
+console.log("Initialising user database...");
+await ensureUsersDb();
+console.log("User database ready.");
 
 /** Maps an AuthError to the appropriate HTTP Response. */
 function authErrorResponse(err: AuthError): Response {
@@ -54,12 +60,31 @@ async function parseCredentials(
 
 /** Enforces auth on a request, returning a Response on failure or null on success. */
 async function enforceAuth(req: Request): Promise<Response | null> {
-  try {
-    await requireAuth(req);
-    return null;
-  } catch (err) {
-    return authErrorResponse(err as AuthError);
+  const result = await requireAuth(req);
+  if (typeof result === "string") {
+    return authErrorResponse(result);
   }
+  return null;
+}
+
+/**
+ * Filters a list of folder entries, removing internal/confidential documents
+ * when the request is unauthenticated. Authenticated requests see all entries.
+ */
+async function filterVisibleEntries(
+  req: Request,
+  entries: FolderEntry[],
+): Promise<FolderEntry[]> {
+  const authResult = await requireAuth(req);
+  const isAuthenticated = typeof authResult !== "string";
+  if (isAuthenticated) return entries;
+  return entries.filter((e) => {
+    const sec = e.frontmatter?.["security"];
+    const security = (sec === "public" || sec === "internal" || sec === "confidential")
+      ? (sec as DocumentSecurity)
+      : null;
+    return !isProtectedDocument(security);
+  });
 }
 
 const server = Bun.serve({
@@ -178,10 +203,14 @@ const server = Bun.serve({
     if (req.method === "GET" && pathname === "/") {
       console.log("Listing root folder index");
       const entries = await listFolder();
-      if (entries === null || entries.length === 0) {
+      if (entries === null) {
         return new Response(null, { status: 204 });
       }
-      return new Response(formatFolderIndex("Index", entries), {
+      const visibleEntries = await filterVisibleEntries(req, entries);
+      if (visibleEntries.length === 0) {
+        return new Response(null, { status: 204 });
+      }
+      return new Response(formatFolderIndex("Index", visibleEntries), {
         status: 200,
         headers: { "Content-Type": "text/markdown; charset=utf-8" },
       });
@@ -212,12 +241,13 @@ const server = Bun.serve({
 
       const folderEntries = await listFolder(slug);
       if (folderEntries !== null) {
-        if (folderEntries.length === 0) {
+        const visibleEntries = await filterVisibleEntries(req, folderEntries);
+        if (visibleEntries.length === 0) {
           console.log(`Empty folder for slug: ${slug}`);
           return new Response(null, { status: 204 });
         }
         console.log(`Serving folder index for slug: ${slug}`);
-        return new Response(formatFolderIndex(slug, folderEntries), {
+        return new Response(formatFolderIndex(slug, visibleEntries), {
           status: 200,
           headers: { "Content-Type": "text/markdown; charset=utf-8" },
         });

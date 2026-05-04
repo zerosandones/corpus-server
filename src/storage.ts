@@ -112,8 +112,18 @@ export async function saveDocument(
 /** The approved security classification values for a document. */
 export type DocumentSecurity = "public" | "internal" | "confidential";
 
-/** Approved security classification values as a set for fast membership checks. */
-const SECURITY_VALUES = new Set<string>(["public", "internal", "confidential"]);
+/**
+ * Returns true when the given security level requires authentication for read access.
+ * Both "internal" and "confidential" documents are protected.
+ * "public" documents and documents with no security level are not protected.
+ *
+ * @param security The document security classification, or null if not set.
+ */
+export function isProtectedDocument(
+  security: DocumentSecurity | null,
+): boolean {
+  return security === "internal" || security === "confidential";
+}
 
 /**
  * Reads the `security` frontmatter field of a document without decrypting its body.
@@ -138,8 +148,8 @@ export async function getDocumentSecurity(
   const raw = await file.text();
   const fm = parseFrontmatter(raw);
   const sec = fm?.["security"];
-  if (typeof sec === "string" && SECURITY_VALUES.has(sec)) {
-    return sec as DocumentSecurity;
+  if (sec === "public" || sec === "internal" || sec === "confidential") {
+    return sec;
   }
   return null;
 }
