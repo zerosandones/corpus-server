@@ -1,0 +1,18 @@
+{
+  "name": "corpus-server",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "elysia": "latest",
+    "@elysiajs/swagger": "latest",
+    "yaml": "^2.7.1",
+    "chokidar": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
