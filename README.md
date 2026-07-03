@@ -2,31 +2,13 @@
 
 Corpus Server is a lightweight, high-performance web API that hosts raw Markdown documents instead of traditional HTML. It is designed to be the ultimate single-source-of-truth knowledge base, engineered specifically for co-habitation between human developers/writers and AI agents.
 
-By storing knowledge in standard Markdown with structured YAML frontmatter, Corpus Server preserves the simplicity of a normal hierarchical file system while exposing robust REST APIs, content negotiation, and powerful indexing using the Bun runtime and Elysia.js framework.
-
----
-
-## Table of Contents
-1. [Core Philosophy](#core-philosophy)
-2. [Architectural Overview](#architectural-overview)
-3. [The Frontmatter Metadata Standard](#the-frontmatter-metadata-standard)
-4. [API Specification & Endpoints](#api-specification--endpoints)
-5. [Content Negotiation: Markdown vs. JSON](#content-negotiation-markdown-vs-json)
-6. [Dynamic Directory Indexing](#dynamic-directory-indexing)
-7. [AI Agent Integration Guide](#ai-agent-integration-guide)
-8. [Security & Access Control (ACL)](#security--access-control-acl)
-9. [Server Configuration](#server-configuration)
-10. [Reference Implementation Blueprint](#reference-implementation-blueprint)
+By storing knowledge in standard Markdown with structured YAML frontmatter, Corpus Server preserves the simplicity of a normal hierarchical file system while exposing robust REST APIs using the Bun runtime and Elysia.js framework.
 
 ---
 
 ## Core Philosophy
 
 Traditional wikis and knowledge bases compile Markdown into heavy, opinionated HTML/CSS pages. While beautiful for standard web browsers, this compilation strips out semantic raw data, clutters the payload, and makes it incredibly expensive (in token consumption and parsing complexity) for AI agents and developer-written automation tools to read, reason over, and write to.
-
-Corpus Server solves this by operating as a high-speed, API-first Markdown server. It adopts a dual-format model served strictly over raw text and JSON:
-- **For Content Creators & Editors**: A highly predictable filesystem mapping where raw Markdown documents can be created, updated, and organized via standard REST APIs.
-- **For AI & Automation**: A ultra-clean API that serves raw Markdown, parses metadata directly into JSON, and offers recursive directory traversal with zero HTML boilerplate.
 
 ### Why Markdown + File System?
 - **Zero Lock-in**: Your knowledge base is just a folder of text files. If the server dies, your files remain perfectly readable.
@@ -63,49 +45,8 @@ graph TD
 
 Every document on the server should start with a YAML frontmatter block enclosed by triple-dashed lines (`---`). This acts as the database record for the document.
 
-### Standard Schema
-```markdown
----
-title: "System Architecture Design"
-description: "A comprehensive spec of the microservices layout and data flows."
-created: 2026-05-30T21:00:00Z
-updated: 2026-05-30T21:00:00Z
-author: "Dave <dave@company.com>"
-tags: [architecture, backend, spec]
-security:
-  level: "internal"
-  roles: ["engineering", "product"]
-ai:
-  priority: "high"
-  ignore: false
-  summary: "This document describes the 3-tier microservice architecture and data pipelines."
-custom:
-  version: "v2.1"
-  status: "approved"
----
-# Actual Document Heading
+Further information on the file format can be found [in this document](./docs/markdown_format.md)
 
-Document body begins here...
-```
-
-### Metadata Fields Detail
-| Field | Type | Description | Required |
-| :--- | :--- | :--- | :--- |
-| `title` | String | Human-readable title of the document. Defaults to the filename if omitted. | Yes |
-| `description` | String | A brief summary of the document's contents. | Yes |
-| `created` | ISO8601 | Timestamp when the document was initially published. | Yes |
-| `updated` | ISO8601 | Timestamp of the last revision. | Yes |
-| `author` | String | Name/Email of the owner of the document. | No |
-| `tags` | Array | List of strings for categorizing and search filtering. | No |
-| `security` | Object | Access control configuration defining permission tiers. | No |
-| `ai` | Object | Optimization metadata for LLMs and indexing scripts. | No |
-| `custom` | Object | Free-form key-value pairs for organizational extension. | No |
-
----
-
-## API Specification & Endpoints
-
-Corpus Server provides a complete CRUD API mapped straight to the folder tree using Elysia.js routing.
 
 ### Request Safety & File Handling
 
