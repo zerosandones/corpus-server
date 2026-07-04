@@ -216,16 +216,39 @@ export function findByTitle(query: string, db: Database): IndexedDocument[] {
 }
 
 /**
- * Scans `baseDir` for `.md` files and indexes each one.
- * Subdirectories are not recursed — only top-level files are indexed.
- * Pass `slug` to scope to a sub-folder (same convention as `getDir`).
+ * Recursively scans `baseDir` (and all child folders) for `.md` files and
+ * indexes each one. Any previously indexed document whose file no longer
+ * exists under the scanned tree is removed from the index.
+ * Pass `slug` to scope the scan to a sub-folder.
  */
 export async function indexDirectory(
   db: Database,
   baseDir: string = "documents",
   slug: string = "",
 ): Promise<void> {
-  const dir = slug ? join(baseDir, slug) : baseDir;
+  const found = new Set<string>();
+  await scanDir(db, baseDir, slug, found);
+
+  // Remove stale index entries (files that were deleted from disk).
+  const prefix = slug ? `${slug}/` : "";
+  const rows = db
+    .query<{ slug: string }, []>("SELECT slug FROM documents")
+    .all();
+  for (const { slug: s } of rows) {
+    if (prefix && !s.startsWith(prefix)) continue;
+    if (!found.has(s)) {
+      removeFromIndex(s, db);
+    }
+  }
+}
+
+async function scanDir(
+  db: Database,
+  baseDir: string,
+  relSlug: string,
+  found: Set<string>,
+): Promise<void> {
+  const dir = relSlug ? join(baseDir, relSlug) : baseDir;
 
   let entries: import("fs").Dirent[];
   try {
@@ -235,9 +258,13 @@ export async function indexDirectory(
   }
 
   for (const entry of entries) {
-    if (entry.isFile() && entry.name.endsWith(".md")) {
+    if (entry.isDirectory()) {
+      const subSlug = relSlug ? `${relSlug}/${entry.name}` : entry.name;
+      await scanDir(db, baseDir, subSlug, found);
+    } else if (entry.isFile() && entry.name.endsWith(".md")) {
       const baseName = entry.name.slice(0, -3);
-      const docSlug = slug ? `${slug}/${baseName}` : baseName;
+      const docSlug = relSlug ? `${relSlug}/${baseName}` : baseName;
+      found.add(docSlug);
       const filePath = join(dir, entry.name);
       const content = await Bun.file(filePath).text();
       indexDocument(docSlug, content, db);

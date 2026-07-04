@@ -359,6 +359,49 @@ describe("indexDirectory", () => {
     expect(docs[0]!.slug).toContain("my-doc");
   });
 
+  it("indexes .md files in subdirectories recursively", async () => {
+    await Bun.$`mkdir -p ${testDir}/sub`.quiet();
+    await Bun.write(`${testDir}/top.md`, MINIMAL_FRONTMATTER);
+    await Bun.write(`${testDir}/sub/nested.md`, FULL_FRONTMATTER);
+
+    const db = makeDb();
+    await indexDirectory(db, testDir);
+
+    const docs = getAll(db);
+    expect(docs).toHaveLength(2);
+    const slugs = docs.map((d) => d.slug).sort();
+    expect(slugs).toEqual(["sub/nested", "top"]);
+  });
+
+  it("removes stale index entries when files are deleted", async () => {
+    await Bun.write(`${testDir}/doc-a.md`, MINIMAL_FRONTMATTER);
+    await Bun.write(`${testDir}/doc-b.md`, FULL_FRONTMATTER);
+
+    const db = makeDb();
+    await indexDirectory(db, testDir);
+    expect(getAll(db)).toHaveLength(2);
+
+    // Delete doc-b and re-index
+    await Bun.$`rm ${testDir}/doc-b.md`.quiet();
+    await indexDirectory(db, testDir);
+
+    const docs = getAll(db);
+    expect(docs).toHaveLength(1);
+    expect(docs[0]!.slug).toBe("doc-a");
+  });
+
+  it("only removes stale entries under the scoped slug prefix", async () => {
+    const db = makeDb();
+    // Index a document outside the scanned prefix directly
+    indexDocument("other/doc", MINIMAL_FRONTMATTER, db);
+
+    await Bun.write(`${testDir}/doc-a.md`, MINIMAL_FRONTMATTER);
+    await indexDirectory(db, ".", testDir.replace("./", ""));
+
+    // "other/doc" should be untouched
+    expect(getAll(db).find((d) => d.slug === "other/doc")).toBeDefined();
+  });
+
   it("is a no-op for a non-existent directory", async () => {
     const db = makeDb();
     await expect(
