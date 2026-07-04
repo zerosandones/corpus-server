@@ -10,20 +10,9 @@ export function initDb(db: Database): void {
 
   db.run(`
     CREATE TABLE IF NOT EXISTS documents (
-      slug            TEXT    PRIMARY KEY,
-      title           TEXT,
-      description     TEXT,
-      created         TEXT,
-      updated         TEXT,
-      author          TEXT,
-      security_level  TEXT,
-      security_roles  TEXT,
-      security_users  TEXT,
-      ai_priority     TEXT,
-      ai_ignore       INTEGER NOT NULL DEFAULT 0,
-      ai_summary      TEXT,
-      custom          TEXT,
-      indexed_at      TEXT    NOT NULL
+      slug        TEXT PRIMARY KEY,
+      title       TEXT,
+      description TEXT
     );
   `);
 

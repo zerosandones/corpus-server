@@ -30,21 +30,10 @@ The frontmatter in each document can have an `ai` object which will affect the i
 
 ### Indexed Fields
 
-The following fields are indexed:
+The following fields are indexed
+* slug
+* title
+* description
+* tags
 
-| field | notes |
-| --------- | -------- |
-| slug | Unique document path identifier |
-| title | |
-| description | |
-| created | |
-| updated | |
-| author | |
-| tags | Each tag is stored separately in a join table for efficient tag-based queries |
-| security.level | |
-| security.roles | Stored as a JSON array |
-| security.users | Stored as a JSON array |
-| ai.priority | |
-| ai.ignore | |
-| ai.summary | |
-| custom | Stored as a JSON object |
+The tag field will index each tag separately to help tag based searches.
