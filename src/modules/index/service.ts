@@ -141,12 +141,17 @@ export async function indexDirectory(
   await scanDir(db, baseDir, slug, found);
 
   // Remove stale index entries (files that were deleted from disk).
+  // Filter at the SQL level to avoid loading unrelated rows into JS.
   const prefix = slug ? `${slug}/` : "";
-  const rows = db
-    .query<{ slug: string }, []>("SELECT slug FROM documents")
-    .all();
+  const rows = prefix
+    ? db
+        .query<{ slug: string }, [string]>(
+          "SELECT slug FROM documents WHERE slug LIKE ?",
+        )
+        .all(`${prefix}%`)
+    : db.query<{ slug: string }, []>("SELECT slug FROM documents").all();
+
   for (const { slug: s } of rows) {
-    if (prefix && !s.startsWith(prefix)) continue;
     if (!found.has(s)) {
       removeFromIndex(s, db);
     }
