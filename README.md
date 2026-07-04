@@ -240,6 +240,58 @@ If requested as raw Markdown, the server constructs a clean, hierarchical catalo
 
 ---
 
+## MCP Server Integration
+
+Corpus Server implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/), enabling AI clients such as Claude Desktop and VS Code extensions to discover, search, and read documents natively using structured tool calls.
+
+Full reference documentation is available in [`docs/mcp.md`](./docs/mcp.md).
+
+### Quick Start — stdio (Claude Desktop)
+
+Add the following to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "corpus": {
+      "command": "bun",
+      "args": ["run", "mcp"],
+      "cwd": "/path/to/corpus-server"
+    }
+  }
+}
+```
+
+### Quick Start — HTTP
+
+When the server is running (`bun run dev`), the MCP endpoint is available at:
+
+```
+POST http://localhost:3000/_mcp
+```
+
+### Available Tools
+
+| Tool | Description |
+| :--- | :--- |
+| `list_documents` | Lists all indexed documents. Accepts an optional `scope` prefix to filter by folder. |
+| `get_document` | Returns the full Markdown content of a document by its `slug`. |
+| `search_documents` | Searches by `query` (title/description) and/or `tags`. |
+
+### Resources
+
+Documents are also addressable as MCP resources via the `corpus://` URI scheme:
+
+```
+corpus://engineering/architecture
+```
+
+### Security Note
+
+Documents with `ai.ignore: true` in their frontmatter are excluded from the index and will never appear in MCP tool or resource responses.
+
+---
+
 ## AI Agent Integration Guide
 
 Corpus Server is engineered to be an excellent backend for agentic AI workflows. When writing agents that interact with this server, observe the following conventions:

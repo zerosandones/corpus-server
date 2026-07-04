@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "scripts": {
     "test": "bun test",
-    "dev": "bun run --watch src/index.ts"
+    "dev": "bun run --watch src/index.ts",
+    "mcp": "bun run src/mcp.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
