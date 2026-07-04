@@ -18,15 +18,15 @@ The index for each file is saved in an embedded database on the server.
 
 ### Indexing Process
 
-Currently as there is no way to save, update or delete a document via the API, each time the server starts up it will index all the saved documents. The index will process each document saved to the document folder and all child folders. If a file has been removed then the index must be removed.
+Currently as there is no way to save, update or delete a document via the API, each time the server starts up it will index all the saved documents. The index will process each document saved to the document folder and all child folders. If a file has been removed then the index entry is also removed.
 
-### A.I fontmatter
+### A.I frontmatter
 
-The fontmatter in each document can have an ai object which will effect the indexing.
+The frontmatter in each document can have an `ai` object which will affect the indexing.
 
 | key | effect |
 | --------- | -------- |
-| ignore | False: the document is **not** indexed, otherwise it is |
+| ignore | True: the document is **not** indexed, otherwise it is |
 
 ### Indexed Fields
 

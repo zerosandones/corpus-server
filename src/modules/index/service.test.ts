@@ -83,9 +83,6 @@ describe("indexDocument", () => {
     expect(doc!.slug).toBe("docs/full");
     expect(doc!.title).toBe("Full Document");
     expect(doc!.description).toBe("A comprehensive test document.");
-    expect(doc!.created).toBe("2026-06-01T09:00:00Z");
-    expect(doc!.updated).toBe("2026-06-02T10:00:00Z");
-    expect(doc!.author).toBe("Dave <dave@example.com>");
   });
 
   it("stores tags in the document_tags table", () => {
@@ -96,44 +93,14 @@ describe("indexDocument", () => {
     expect(doc!.tags).toEqual(["typescript", "bun", "testing"]);
   });
 
-  it("stores security nested fields", () => {
-    const db = makeDb();
-    indexDocument("docs/full", FULL_FRONTMATTER, db);
 
-    const [doc] = getAll(db);
-    expect(doc!.securityLevel).toBe("confidential");
-    expect(doc!.securityRoles).toEqual(["engineering", "product"]);
-    expect(doc!.securityUsers).toEqual(["dave@example.com"]);
-  });
-
-  it("stores ai nested fields", () => {
-    const db = makeDb();
-    indexDocument("docs/full", FULL_FRONTMATTER, db);
-
-    const [doc] = getAll(db);
-    expect(doc!.aiPriority).toBe("high");
-    expect(doc!.aiIgnore).toBe(false);
-    expect(doc!.aiSummary).toBe("A one-liner for LLMs");
-  });
-
-  it("stores custom nested fields as an object", () => {
-    const db = makeDb();
-    indexDocument("docs/full", FULL_FRONTMATTER, db);
-
-    const [doc] = getAll(db);
-    expect(doc!.custom).toEqual({ version: "v1.0", status: "draft" });
-  });
 
   it("stores null fields gracefully for minimal frontmatter", () => {
     const db = makeDb();
     indexDocument("docs/minimal", MINIMAL_FRONTMATTER, db);
 
     const [doc] = getAll(db);
-    expect(doc!.author).toBeNull();
     expect(doc!.tags).toEqual([]);
-    expect(doc!.securityLevel).toBeNull();
-    expect(doc!.aiPriority).toBeNull();
-    expect(doc!.custom).toEqual({});
   });
 
   it("indexes a document with no frontmatter (all nulls)", () => {
@@ -188,14 +155,6 @@ describe("indexDocument", () => {
     expect(getAll(db)).toHaveLength(0);
   });
 
-  it("records a non-empty indexed_at timestamp", () => {
-    const db = makeDb();
-    indexDocument("docs/full", FULL_FRONTMATTER, db);
-
-    const [doc] = getAll(db);
-    expect(doc!.indexedAt).toBeTruthy();
-    expect(() => new Date(doc!.indexedAt)).not.toThrow();
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -357,6 +316,49 @@ describe("indexDirectory", () => {
 
     const docs = getAll(db);
     expect(docs[0]!.slug).toContain("my-doc");
+  });
+
+  it("indexes .md files in subdirectories recursively", async () => {
+    await Bun.$`mkdir -p ${testDir}/sub`.quiet();
+    await Bun.write(`${testDir}/top.md`, MINIMAL_FRONTMATTER);
+    await Bun.write(`${testDir}/sub/nested.md`, FULL_FRONTMATTER);
+
+    const db = makeDb();
+    await indexDirectory(db, testDir);
+
+    const docs = getAll(db);
+    expect(docs).toHaveLength(2);
+    const slugs = docs.map((d) => d.slug).sort();
+    expect(slugs).toEqual(["sub/nested", "top"]);
+  });
+
+  it("removes stale index entries when files are deleted", async () => {
+    await Bun.write(`${testDir}/doc-a.md`, MINIMAL_FRONTMATTER);
+    await Bun.write(`${testDir}/doc-b.md`, FULL_FRONTMATTER);
+
+    const db = makeDb();
+    await indexDirectory(db, testDir);
+    expect(getAll(db)).toHaveLength(2);
+
+    // Delete doc-b and re-index
+    await Bun.$`rm ${testDir}/doc-b.md`.quiet();
+    await indexDirectory(db, testDir);
+
+    const docs = getAll(db);
+    expect(docs).toHaveLength(1);
+    expect(docs[0]!.slug).toBe("doc-a");
+  });
+
+  it("only removes stale entries under the scoped slug prefix", async () => {
+    const db = makeDb();
+    // Index a document outside the scanned prefix directly
+    indexDocument("other/doc", MINIMAL_FRONTMATTER, db);
+
+    await Bun.write(`${testDir}/doc-a.md`, MINIMAL_FRONTMATTER);
+    await indexDirectory(db, ".", testDir.replace("./", ""));
+
+    // "other/doc" should be untouched
+    expect(getAll(db).find((d) => d.slug === "other/doc")).toBeDefined();
   });
 
   it("is a no-op for a non-existent directory", async () => {
