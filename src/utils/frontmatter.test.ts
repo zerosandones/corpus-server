@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { parseFrontmatter } from "./frontmatter";
+import { parseFrontmatter, parseDocumentFrontmatter } from "./frontmatter";
 
 describe("parseFrontmatter", () => {
   describe("valid frontmatter", () => {
@@ -93,5 +93,114 @@ describe("parseFrontmatter", () => {
       const result = parseFrontmatter(content);
       expect(result).toEqual({ title: "My Doc" });
     });
+  });
+});
+
+describe("parseDocumentFrontmatter", () => {
+  it("should parse core scalar fields", () => {
+    const content = `---
+title: "My Doc"
+description: "A summary"
+created: 2026-06-01T09:00:00Z
+updated: 2026-06-02T10:00:00Z
+author: "Dave <dave@example.com>"
+---
+# Body`;
+    const result = parseDocumentFrontmatter(content);
+    expect(result?.title).toBe("My Doc");
+    expect(result?.description).toBe("A summary");
+    expect(result?.created).toBe("2026-06-01T09:00:00Z");
+    expect(result?.updated).toBe("2026-06-02T10:00:00Z");
+    expect(result?.author).toBe("Dave <dave@example.com>");
+  });
+
+  it("should parse inline tag arrays", () => {
+    const content = `---\ntitle: Doc\ntags: [typescript, bun, markdown]\n---\n`;
+    const result = parseDocumentFrontmatter(content);
+    expect(result?.tags).toEqual(["typescript", "bun", "markdown"]);
+  });
+
+  it("should parse a security nested object", () => {
+    const content = `---
+title: Secret
+security:
+  level: confidential
+  roles: [hr, executive]
+  users: [dave@example.com]
+---`;
+    const result = parseDocumentFrontmatter(content);
+    expect(result?.security?.level).toBe("confidential");
+    expect(result?.security?.roles).toEqual(["hr", "executive"]);
+    expect(result?.security?.users).toEqual(["dave@example.com"]);
+  });
+
+  it("should parse an ai nested object", () => {
+    const content = `---
+title: AI Doc
+ai:
+  priority: high
+  ignore: false
+  summary: A one-liner for LLMs
+---`;
+    const result = parseDocumentFrontmatter(content);
+    expect(result?.ai?.priority).toBe("high");
+    expect(result?.ai?.ignore).toBe(false);
+    expect(result?.ai?.summary).toBe("A one-liner for LLMs");
+  });
+
+  it("should parse ai.ignore: true", () => {
+    const content = `---\ntitle: Hidden\nai:\n  ignore: true\n---`;
+    const result = parseDocumentFrontmatter(content);
+    expect(result?.ai?.ignore).toBe(true);
+  });
+
+  it("should parse a custom nested object", () => {
+    const content = `---
+title: Versioned
+custom:
+  version: v1.0
+  status: draft
+---`;
+    const result = parseDocumentFrontmatter(content);
+    expect(result?.custom?.version).toBe("v1.0");
+    expect(result?.custom?.status).toBe("draft");
+  });
+
+  it("should parse a fully-populated document", () => {
+    const content = `---
+title: "Full Doc"
+description: "Everything"
+created: 2026-06-01T09:00:00Z
+updated: 2026-06-02T10:00:00Z
+author: "Dave"
+tags: [a, b]
+security:
+  level: private
+  roles: [engineering]
+ai:
+  priority: medium
+  ignore: false
+  summary: Summary text
+custom:
+  version: v2
+---`;
+    const result = parseDocumentFrontmatter(content);
+    expect(result?.title).toBe("Full Doc");
+    expect(result?.tags).toEqual(["a", "b"]);
+    expect(result?.security?.level).toBe("private");
+    expect(result?.ai?.priority).toBe("medium");
+    expect(result?.custom?.version).toBe("v2");
+  });
+
+  it("should return undefined for empty content", () => {
+    expect(parseDocumentFrontmatter("")).toBeUndefined();
+  });
+
+  it("should return undefined when no frontmatter block present", () => {
+    expect(parseDocumentFrontmatter("# Just a heading")).toBeUndefined();
+  });
+
+  it("should return undefined when frontmatter block is empty", () => {
+    expect(parseDocumentFrontmatter("---\n---\n# Body")).toBeUndefined();
   });
 });
