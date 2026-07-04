@@ -11,17 +11,19 @@ const db = new Database(":memory:");
 initDb(db);
 await indexDirectory(db);
 
-// Create a single stateless MCP server instance shared across all HTTP requests.
-const mcpServer = createMcpServer(db);
-
 const app = new Elysia();
 app.use(storage);
 
 // MCP Streamable HTTP endpoint — handles JSON-RPC requests from AI clients.
+// A fresh McpServer and transport are created per request so that each
+// stateless request gets its own isolated connection lifecycle, which is the
+// recommended pattern for the WebStandardStreamableHTTPServerTransport stateless
+// mode and avoids transport state conflicts under concurrent load.
 app.post("/_mcp", async ({ request }) => {
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // stateless mode
   });
+  const mcpServer = createMcpServer(db);
   await mcpServer.connect(transport);
   return transport.handleRequest(request);
 });

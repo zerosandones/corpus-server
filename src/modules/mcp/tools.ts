@@ -155,7 +155,9 @@ export function registerTools(server: McpServer, db: Database): void {
         }
       }
 
-      // If neither query nor tags provided, return all indexed documents.
+      // If neither query nor tags provided, behave as a full document listing.
+      // This lets clients use a single tool to enumerate all documents without
+      // needing to know about list_documents.
       if (!query && (!tags || tags.length === 0)) {
         for (const doc of getAll(db)) {
           results.push(doc);
