@@ -63,18 +63,20 @@ describe("StorageService", () => {
   describe("getDir", () => {
     it("should return markdown content when directory exists", async () => {
       const result = await getDir("", testDir);
-      expect(result).toContain("## Documents");
-      expect(typeof result).toBe("string");
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toHaveLength(1);
+      expect(result?.[0]?.title).toBe("Test Document");
     });
 
     it("should include frontmatter in directory listing", async () => {
       const result = await getDir("", testDir);
-      expect(result).toContain("test-doc");
+      expect(Array.isArray(result)).toBe(true);
+      expect(result?.some((entry) => entry.slug === "test-doc")).toBe(true);
     });
 
     it("should return error message for non-existent directory", async () => {
       const result = await getDir("", "/non-existent-dir");
-      expect(result).toContain("Directory Not Found");
+      expect(result).toBeNull();
     });
   });
 });
